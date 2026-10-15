@@ -1,0 +1,1333 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Yaşar Üniversitesi ders kaydı planlayıcısı: çakışmasız program, alttan ders ve ön koşul kontrolü, B planı, kontenjan bekleme listesi.">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Yaşar Ders Planlayıcı</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: profile strip (faculty → department → year) on top; assistant + course basket left; timetable right (day tabs on phones); Plan B / passed courses / friends / calendar / advisor cards beneath */
+:root{
+  --bg:#f3f5f9; --surface:#ffffff; --ink:#152238; --muted:#5b6a82; --line:#dde3ec;
+  --accent:#1f4fd1; --accent-soft:#e6edfd; --on-accent:#ffffff;
+  --ok:#1d8a55; --ok-soft:#e3f4ea; --bad:#c8322b; --bad-soft:#fbe7e5; --warn:#a85f00; --warn-soft:#fdf1dc;
+  --c1:#dfe8ff; --c2:#ffe9d1; --c3:#dff3ea; --c4:#f2e3fb; --c5:#fde2e8; --c6:#e1f2f7; --c7:#f3eed8; --c8:#e8e8f5; --c9:#ffe0d6; --c10:#e2f0d9; --c11:#f9e2f2;
+  --cbord:rgba(21,34,56,.18);
+  --f-display:"Archivo",system-ui,sans-serif; --f-body:"Manrope",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1522; --surface:#172033; --ink:#e7ecf5; --muted:#9aa8c0; --line:#2a3650;
+  --accent:#7aa2ff; --accent-soft:#1d2b4f; --on-accent:#0f1522;
+  --ok:#4fc68a; --ok-soft:#163626; --bad:#ff7a70; --bad-soft:#3d1c1c; --warn:#f0a53a; --warn-soft:#3a2a12;
+  --c1:#26386a; --c2:#5a3a1c; --c3:#1d4a39; --c4:#46295a; --c5:#5a2532; --c6:#1d4652; --c7:#4b4422; --c8:#33335a; --c9:#5a2f22; --c10:#2c4a22; --c11:#4f2446;
+  --cbord:rgba(255,255,255,.14); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1522; --surface:#172033; --ink:#e7ecf5; --muted:#9aa8c0; --line:#2a3650;
+  --accent:#7aa2ff; --accent-soft:#1d2b4f; --on-accent:#0f1522;
+  --ok:#4fc68a; --ok-soft:#163626; --bad:#ff7a70; --bad-soft:#3d1c1c; --warn:#f0a53a; --warn-soft:#3a2a12;
+  --c1:#26386a; --c2:#5a3a1c; --c3:#1d4a39; --c4:#46295a; --c5:#5a2532; --c6:#1d4652; --c7:#4b4422; --c8:#33335a; --c9:#5a2f22; --c10:#2c4a22; --c11:#4f2446;
+  --cbord:rgba(255,255,255,.14); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 48px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(22px,4vw,30px);letter-spacing:-.02em;margin:0;text-wrap:balance}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);margin:4px 0 0;max-width:70ch}
+.lang{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.lang button{font:inherit;font-weight:700;font-size:12px;padding:6px 10px;border:0;background:var(--surface);color:var(--muted);cursor:pointer}
+.lang button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+
+.profile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:12px;align-items:end}
+@media (max-width:760px){.profile{grid-template-columns:minmax(0,1fr)}}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;gap:6px;align-items:center}
+.step{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-size:10px;letter-spacing:0}
+.field select{width:100%}
+.yearseg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.yearseg button{flex:1;font:inherit;font-weight:700;padding:7px 0;border:0;border-right:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;min-width:40px}
+.yearseg button:last-child{border-right:0}
+.yearseg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.srcline{grid-column:1/-1;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.srcline a{color:var(--accent)}
+.badge{font-family:var(--f-mono);font-size:11px;padding:2px 7px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--muted)}
+.badge.ok{color:var(--ok);background:var(--ok-soft);border-color:transparent}
+.badge.warn{color:var(--warn);background:var(--warn-soft);border-color:transparent}
+
+.status{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.lbl{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.val{font-family:var(--f-display);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.small{font-size:12px;color:var(--muted)}
+.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok);transition:width .25s}
+.meter i.over{background:var(--bad)}
+select,input[type=text],input[type=date],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 9px;max-width:100%}
+textarea{width:100%;resize:vertical;min-height:64px;line-height:1.4}
+.pill{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px;padding:3px 10px;border-radius:999px;width:fit-content;max-width:100%}
+.pill.ok{color:var(--ok);background:var(--ok-soft)} .pill.bad{color:var(--bad);background:var(--bad-soft)} .pill.idle{color:var(--muted);background:var(--bg)} .pill.warn{color:var(--warn);background:var(--warn-soft)}
+
+.main{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:960px){.main{display:flex;flex-direction:column}.main>.col{display:contents}.o1{order:1}.o2{order:2}.o3{order:3}.o4{order:4}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;min-width:0}
+.panel h2{font-family:var(--f-display);font-size:15px;font-weight:700;margin:0;padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.panel h2 small{font-family:var(--f-body);font-weight:500;color:var(--muted);font-size:12px}
+.pbody{padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+
+.ai{border-color:var(--accent)}
+.ai h2{background:var(--accent-soft);border-radius:11px 11px 0 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:12px;border:1px dashed var(--line);background:var(--bg);color:var(--muted);border-radius:999px;padding:5px 10px;cursor:pointer;text-align:left}
+.chip:hover{color:var(--ink);border-color:var(--accent)}
+.aiout{font-size:13px;background:var(--bg);border-radius:8px;padding:10px 12px;white-space:pre-wrap}
+.aiout:empty{display:none}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+.filter{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+.fbtn{font:inherit;font-size:12px;font-weight:700;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:5px 11px;cursor:pointer}
+.fbtn[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.fbtn .n{font-family:var(--f-mono);font-weight:500;opacity:.7;margin-left:3px}
+.search{flex:1;min-width:120px}
+.courses{display:flex;flex-direction:column;max-height:none}
+.ygroup{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:10px 16px 4px;background:var(--bg);border-bottom:1px solid var(--line)}
+.course{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.course:last-child{border-bottom:0}
+.chead{display:flex;gap:10px;align-items:flex-start}
+.chead input{margin-top:3px;width:18px;height:18px;accent-color:var(--accent);flex:none}
+.chead label{flex:1;min-width:0;cursor:pointer}
+.code{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.cname{font-weight:700}
+.tagsrow{display:flex;gap:5px;flex-wrap:wrap;margin-top:3px}
+.t{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.t.alt{color:var(--warn);background:var(--warn-soft);border-color:transparent}
+.t.pre{color:var(--bad);background:var(--bad-soft);border-color:transparent}
+.t.el{color:var(--accent);background:var(--accent-soft);border-color:transparent}
+.ects{font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.swatch{width:10px;height:10px;border-radius:3px;border:1px solid var(--cbord);display:inline-block;margin-right:6px;vertical-align:middle}
+.secs{display:flex;flex-wrap:wrap;gap:6px;padding-left:28px}
+.sec{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:7px;padding:6px 8px;cursor:pointer;text-align:left;line-height:1.35}
+.sec b{font-family:var(--f-mono);font-weight:500}
+.sec .q{color:var(--muted);font-size:11px}
+.sec:hover{border-color:var(--accent)}
+.sec.on{border-color:var(--accent);background:var(--accent-soft)}
+.sec.full{border-style:dashed}
+.sec.full>b,.sec.full>.q{opacity:.6}
+.sec.full .q{color:var(--bad)}
+.sec .bell{font-size:11px;font-weight:700;color:var(--accent)}
+.sec.watched{border-color:var(--accent);border-style:solid}
+.samerow{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--accent);border-radius:9px;background:var(--accent-soft)}
+.wl{display:flex;flex-direction:column;gap:8px}
+.witem{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+.witem .info{flex:1;min-width:140px}
+.witem.done{background:var(--ok-soft);border-color:transparent}
+.sub2{font-size:12px;font-weight:700;color:var(--ink);margin-top:4px}
+.sec.clash{border-color:var(--bad);background:var(--bad-soft)}
+.fr{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink);margin-left:4px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.empty{padding:22px 16px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.empty h3{margin:0;font-family:var(--f-display);font-size:16px}
+
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.btn{font:inherit;font-weight:700;font-size:13px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 12px;cursor:pointer;min-height:36px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.sm{font-size:12px;padding:4px 9px;min-height:30px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.spacer{flex:1}
+.tools label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.altnav{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;font-size:13px}
+
+.gridwrap{overflow-x:auto;padding:12px 16px 16px}
+.tt{--h:42px;display:grid;grid-template-columns:48px repeat(5,minmax(104px,1fr));min-width:590px}
+.tt .dh{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0 6px 8px;text-align:center}
+.tt .dh.free{color:var(--ok)}
+.times{display:flex;flex-direction:column}
+.times div{height:var(--h);font-family:var(--f-mono);font-size:11px;color:var(--muted);padding-top:2px}
+.day{position:relative;border-left:1px solid var(--line);height:calc(var(--h)*12);
+  background-image:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--h) - 1px),var(--line) calc(var(--h) - 1px),var(--line) var(--h))}
+.blk{position:absolute;border-radius:7px;padding:4px 6px;font-size:11px;line-height:1.25;overflow:hidden;border:1px solid var(--cbord);color:var(--ink)}
+.blk b{font-family:var(--f-mono);font-weight:500;display:block;font-size:11px}
+.blk span{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blk.clash{border:2px solid var(--bad);background-image:repeating-linear-gradient(135deg,transparent 0 6px,var(--bad-soft) 6px 12px)}
+/* phone: day tabs instead of grid */
+.mday{display:none;padding:12px 16px 16px;flex-direction:column;gap:10px}
+.dtabs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.dtabs button{font:inherit;font-weight:700;font-size:12px;padding:8px 0;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);cursor:pointer;position:relative}
+.dtabs button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.dtabs button .dot{position:absolute;top:4px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--bad)}
+.mlist{display:flex;flex-direction:column;gap:8px}
+.mitem{display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px;align-items:stretch}
+.mitem .tm{font-family:var(--f-mono);font-size:12px;color:var(--muted);padding-top:8px}
+.mitem .bx{border-radius:9px;padding:8px 10px;border:1px solid var(--cbord);min-width:0}
+.mitem .bx.clash{border:2px solid var(--bad)}
+.mitem .bx b{font-family:var(--f-mono);font-weight:500;font-size:12px}
+.mitem .bx div{font-size:13px;font-weight:600}
+.mitem .bx span{font-size:12px;color:var(--muted)}
+@media (max-width:640px){.gridwrap{display:none}.mday{display:flex}}
+
+.msgs{padding:0 16px 14px;display:flex;flex-direction:column;gap:6px}
+.msgs:empty{display:none}
+.msg{font-size:13px;padding:8px 12px;border-radius:8px}
+.msg.bad{background:var(--bad-soft);color:var(--bad)} .msg.warn{background:var(--warn-soft);color:var(--warn)} .msg.ok{background:var(--ok-soft);color:var(--ok)} .msg.info{background:var(--accent-soft);color:var(--ink)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td .code{display:block}
+.tblwrap{overflow-x:auto}
+.risk{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px}
+.risk.ok{color:var(--ok);background:var(--ok-soft)} .risk.warn{color:var(--warn);background:var(--warn-soft)} .risk.bad{color:var(--bad);background:var(--bad-soft)}
+.friend{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.friend:last-child{border-bottom:0}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none;border:1px solid var(--cbord);background:var(--c4)}
+.friend .info{flex:1;min-width:0}
+.friend .info div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.friend label{font-size:12px;color:var(--muted);display:flex;gap:4px;align-items:center}
+.mono{font-family:var(--f-mono);font-size:11px;word-break:break-all;background:var(--bg);border-radius:6px;padding:6px 8px}
+.links{display:flex;flex-direction:column;gap:4px;font-size:12px}
+.links a{color:var(--accent)}
+.passed{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow:auto}
+.psem{display:flex;flex-direction:column;gap:4px}
+.psem h4{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pitem{display:flex;gap:8px;align-items:center;font-size:13px}
+.pitem input{width:16px;height:16px;accent-color:var(--ok);flex:none}
+.pitem .code{min-width:76px}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;background:var(--bg)}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.summary{font-family:var(--f-mono);font-size:11.5px;white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:10px 12px;max-height:280px;overflow:auto;line-height:1.5}
+.welcome{background:var(--accent-soft);border-radius:12px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.welcome ol{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div style="min-width:0">
+      <h1>Yaşar <span data-tr="Ders Planlayıcı" data-en="Course Planner">Ders Planlayıcı</span></h1>
+      <p class="sub" data-tr="Bölümünü ve sınıfını seç; dersler bölümünün programından gelsin. Çakışmasız programı kur, alttan derslerini ve ön koşullarını kontrol et, kayıt günü için B planını hazırla." data-en="Pick your department and year; courses come from your department's schedule. Build a clash-free timetable, check failed courses and prerequisites, and have a Plan B ready for registration day.">Bölümünü ve sınıfını seç; dersler bölümünün programından gelsin.</p>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button id="lgTr" aria-pressed="true">TR</button><button id="lgEn" aria-pressed="false">EN</button>
+    </div>
+  </header>
+
+  <div class="welcome" id="welcome">
+    <div>
+      <strong data-tr="Nasıl başlanır" data-en="How to start">Nasıl başlanır</strong>
+      <ol class="small">
+        <li data-tr="Fakülteni ve bölümünü seç." data-en="Choose your faculty and department.">Fakülteni ve bölümünü seç.</li>
+        <li data-tr="Sınıfını seç. O sınıfın zorunlu dersleri ve geçemediğin dersler otomatik eklenir." data-en="Choose your year. That year's required courses and any courses you failed are added for you.">Sınıfını seç.</li>
+        <li data-tr="Ne istediğini asistana yaz ya da 'Çakışmasız program öner'e bas." data-en="Tell the assistant what you want, or press 'Suggest a clash-free timetable'.">Asistana yaz.</li>
+      </ol>
+    </div>
+    <button class="btn sm" id="hideWelcome" data-tr="Anladım" data-en="Got it">Anladım</button>
+  </div>
+
+  <section class="profile" aria-label="Profile">
+    <div class="field">
+      <label for="fac"><span class="step">1</span><span data-tr="Fakülte" data-en="Faculty">Fakülte</span></label>
+      <select id="fac"></select>
+    </div>
+    <div class="field">
+      <label for="dept"><span class="step">2</span><span data-tr="Bölüm" data-en="Department">Bölüm</span></label>
+      <select id="dept"></select>
+    </div>
+    <div class="field">
+      <label><span class="step">3</span><span data-tr="Sınıf" data-en="Year">Sınıf</span></label>
+      <div class="yearseg" id="yearSeg" role="group"></div>
+    </div>
+    <div class="field">
+      <label for="term"><span data-tr="Dönem" data-en="Term">Dönem</span></label>
+      <select id="term"><option value="2026-27-guz" data-tr="2026-27 Güz" data-en="2026-27 Fall">2026-27 Güz</option></select>
+    </div>
+    <div class="srcline" id="srcLine"></div>
+  </section>
+
+  <section class="status" aria-label="Status">
+    <div class="stat">
+      <span class="lbl" data-tr="AKTS yükü" data-en="ECTS load">AKTS yükü</span>
+      <span class="val" id="ectsVal">0 / 30</span>
+      <div class="meter"><i id="ectsBar" style="width:0"></i></div>
+      <select id="limit" aria-label="ECTS">
+        <option value="30" data-tr="Limit 30 AKTS (1. sınıf)" data-en="Limit 30 ECTS (1st year)">Limit 30</option>
+        <option value="40" data-tr="Limit 40 AKTS (azami)" data-en="Limit 40 ECTS (maximum)">Limit 40</option>
+      </select>
+    </div>
+    <div class="stat">
+      <span class="lbl" data-tr="Çakışma" data-en="Clashes">Çakışma</span>
+      <span id="clashPill" class="pill idle">—</span>
+      <span class="small" data-tr="Kayıtlı derslerin saatleri çakışamaz." data-en="Registered courses may not overlap.">Kayıtlı derslerin saatleri çakışamaz.</span>
+    </div>
+    <div class="stat">
+      <span class="lbl" data-tr="Ön koşul" data-en="Prerequisites">Ön koşul</span>
+      <span id="prePill" class="pill idle">—</span>
+      <span class="small" id="preTxt"></span>
+    </div>
+    <div class="stat">
+      <span class="lbl" data-tr="Kayıt günü riski" data-en="Registration-day risk">Kayıt günü riski</span>
+      <span id="riskPill" class="pill idle">—</span>
+      <span class="small" id="riskTxt"></span>
+    </div>
+    <div class="stat">
+      <span class="lbl" data-tr="Haftalık yük" data-en="Weekly load">Haftalık yük</span>
+      <span class="val" id="hoursVal">0</span>
+      <span class="small" id="daysVal"></span>
+    </div>
+  </section>
+
+  <div class="main">
+    <div class="col">
+      <section class="panel ai o1" aria-label="Assistant">
+        <h2><span data-tr="Programını tarif et" data-en="Describe your timetable">Programını tarif et</span> <small id="aiMode"></small></h2>
+        <div class="pbody">
+          <textarea id="aiIn" aria-label="Request"></textarea>
+          <div class="chips" id="aiChips"></div>
+          <div class="samerow" id="sameRow" hidden>
+            <div class="sub2" data-tr="Arkadaşımla aynı programı oluştur" data-en="Build the same timetable as my friend">Arkadaşımla aynı programı oluştur</div>
+            <div class="row">
+              <select id="sameSel" aria-label="Friend" style="flex:1;min-width:140px"></select>
+              <button class="btn sm primary" id="sameGo" data-tr="Oluştur" data-en="Build">Oluştur</button>
+              <button class="btn sm" id="sameX" data-tr="Kapat" data-en="Close">Kapat</button>
+            </div>
+            <label class="small row" style="gap:6px"><input type="checkbox" id="sameAdd"> <span data-tr="Arkadaşımın aldığı, bende olmayan dersleri de ekle" data-en="Also add courses my friend takes that I don't">Arkadaşımın aldığı dersleri de ekle</span></label>
+            <span class="small" id="sameNote"></span>
+          </div>
+          <div class="row">
+            <button class="btn primary" id="aiGo" data-tr="Programı kur" data-en="Build my timetable">Programı kur</button>
+            <button class="btn" id="aiStop" hidden data-tr="Durdur" data-en="Stop">Durdur</button>
+          </div>
+          <div class="aiout" id="aiOut" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="panel o3" aria-label="Courses">
+        <h2><span data-tr="Bu dönem açılan dersler" data-en="Courses offered this term">Bu dönem açılan dersler</span> <small id="courseCount"></small></h2>
+        <div class="filter" id="yearFilter"></div>
+        <div class="filter"><input type="text" id="q" class="search" aria-label="Search" data-tr-ph="Ders kodu ya da adı ara" data-en-ph="Search code or name"></div>
+        <div class="courses" id="courses"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel o2" aria-label="Timetable">
+        <div class="tools">
+          <button class="btn primary" id="gen" data-tr="Çakışmasız program öner" data-en="Suggest a clash-free timetable">Çakışmasız program öner</button>
+          <label for="pref"><span data-tr="Öncelik" data-en="Priority">Öncelik</span>
+            <select id="pref">
+              <option value="days" data-tr="En az gün" data-en="Fewest days">En az gün</option>
+              <option value="gaps" data-tr="En az boşluk" data-en="Fewest gaps">En az boşluk</option>
+              <option value="late" data-tr="Sabah 08:30 yok" data-en="No 08:30 classes">Sabah 08:30 yok</option>
+              <option value="fri" data-tr="Cuma boş" data-en="Friday off">Cuma boş</option>
+            </select>
+          </label>
+          <span class="spacer"></span>
+          <div class="altnav" id="altnav" hidden>
+            <button class="btn sm" id="prev" aria-label="Previous">‹</button>
+            <span id="altLbl">1 / 1</span>
+            <button class="btn sm" id="next" aria-label="Next">›</button>
+          </div>
+          <button class="btn" id="clear" data-tr="Temizle" data-en="Clear">Temizle</button>
+        </div>
+        <div class="msgs" id="msgs"></div>
+        <div class="gridwrap"><div class="tt" id="tt"></div></div>
+        <div class="mday" id="mday"><div class="dtabs" id="dtabs"></div><div class="mlist" id="mlist"></div></div>
+      </section>
+
+      <div class="cards o4">
+        <section class="panel" aria-label="Plan B">
+          <h2><span data-tr="Kayıt günü B planı" data-en="Registration-day Plan B">Kayıt günü B planı</span> <small data-tr="Şube dolarsa" data-en="If a section fills up">Şube dolarsa</small></h2>
+          <div class="pbody">
+            <div class="tblwrap"><table><thead><tr><th data-tr="Ders" data-en="Course">Ders</th><th data-tr="A planı" data-en="Plan A">A planı</th><th data-tr="Dolarsa" data-en="If full">Dolarsa</th><th></th></tr></thead><tbody id="planB"></tbody></table></div>
+            <span class="small" data-tr="'Doldu' kayıt günü şubenin dolmasını canlandırır; seni anında yedeğe geçiririz." data-en="'Full' simulates the section filling up on registration day; you're moved to the backup instantly.">'Doldu'</span>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Waitlist">
+          <h2><span data-tr="Kontenjan bekleme listesi" data-en="Seat waitlist">Kontenjan bekleme listesi</span> <small id="wCount"></small></h2>
+          <div class="pbody">
+            <span class="small" data-tr="Dolu bir şubeye tıkla, bekleme listesine ekle. Yer açılınca sayfada uyarı çıkar ve e-postana bildirim gider." data-en="Tap a full section to join its waitlist. When a seat opens you get an alert here and an email.">Dolu bir şubeye tıkla.</span>
+            <div class="row">
+              <input type="text" id="wEmail" inputmode="email" autocomplete="email" aria-label="Email" data-tr-ph="E-posta adresin" data-en-ph="Your email address" style="flex:1;min-width:160px">
+            </div>
+            <div class="wl" id="wList"></div>
+            <span class="small" id="wNote"></span>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Passed courses">
+          <h2><span data-tr="Geçtiğim dersler" data-en="Courses I've passed">Geçtiğim dersler</span> <small id="passedCount"></small></h2>
+          <div class="pbody">
+            <span class="small" data-tr="Geçemediğin dersin işaretini kaldır: bu dönem açılıyorsa alttan olarak eklenir, ön koşul olduğu dersler uyarı verir." data-en="Untick a course you failed: if it's offered this term it's added as a repeat, and courses that need it show a warning.">Geçemediğin dersin işaretini kaldır.</span>
+            <div class="passed" id="passed"></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Import schedule">
+          <h2><span data-tr="Bölüm ders programını yükle" data-en="Import your department's schedule">Bölüm ders programını yükle</span></h2>
+          <div class="pbody">
+            <div class="drop" id="drop">
+              <strong data-tr="Excel dosyasını buraya bırak" data-en="Drop the Excel file here">Excel dosyasını buraya bırak</strong>
+              <span class="small" data-tr="Bölüm sitende yayınlanan .xlsx ya da .csv ders programı. Dersler, şubeler ve saatler otomatik çıkarılır." data-en="The .xlsx or .csv schedule your department publishes. Courses, sections and times are extracted automatically.">.xlsx / .csv</span>
+              <label class="btn sm" for="file" style="cursor:pointer"><span data-tr="Dosya seç" data-en="Choose file">Dosya seç</span></label>
+              <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+            </div>
+            <div class="small" id="impNote"></div>
+            <div class="row"><button class="btn sm" id="shareSched" hidden data-tr="Bölümümle paylaş" data-en="Share with my department">Bölümümle paylaş</button>
+              <button class="btn sm" id="resetSched" hidden data-tr="Yüklemeyi kaldır" data-en="Remove import">Yüklemeyi kaldır</button></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Friends">
+          <h2><span data-tr="Arkadaşlarla eşleş" data-en="Match with friends">Arkadaşlarla eşleş</span> <small id="grpState"></small></h2>
+          <div class="pbody">
+            <div id="friends"></div>
+            <div class="row">
+              <label class="small row" style="gap:6px"><input type="checkbox" id="showFr"> <span data-tr="Arkadaşlarımı programda göster" data-en="Show friends on my timetable">Arkadaşlarımı programda göster</span></label>
+              <span class="spacer"></span>
+              <button class="btn sm" id="demoFr" data-tr="Örnek arkadaş ekle" data-en="Add example friend">Örnek arkadaş ekle</button>
+            </div>
+            <div class="row">
+              <input type="text" id="myName" aria-label="Name" data-tr-ph="Adın" data-en-ph="Your name" style="flex:1;min-width:110px">
+              <button class="btn sm" id="saveGroup" hidden data-tr="Programımı gruba kaydet" data-en="Save to group">Programımı gruba kaydet</button>
+              <button class="btn sm" id="copyCode" data-tr="Paylaşım kodumu kopyala" data-en="Copy my share code">Paylaşım kodumu kopyala</button>
+            </div>
+            <div class="mono" id="myCode"></div>
+            <div class="row">
+              <input type="text" id="friendCode" aria-label="Friend code" data-tr-ph="Arkadaşının kodunu yapıştır" data-en-ph="Paste a friend's code" style="flex:1;min-width:150px">
+              <button class="btn sm" id="addFriend" data-tr="Ekle" data-en="Add">Ekle</button>
+            </div>
+            <div class="sub2" data-tr="Arkadaşının programını yükle" data-en="Upload a friend's timetable">Arkadaşının programını yükle</div>
+            <span class="small" data-tr="OBS ekran görüntüsü, takvim dosyası (.ics) ya da kopyalanmış ders listesi. Ders kodları ve şubeler otomatik bulunur." data-en="An OBS screenshot, a calendar file (.ics) or a copied course list. Course codes and sections are found automatically.">OBS ekran görüntüsü, .ics ya da ders listesi.</span>
+            <div class="row">
+              <input type="text" id="fName" aria-label="Friend name" data-tr-ph="Arkadaşının adı" data-en-ph="Friend's name" style="flex:1;min-width:120px">
+              <label class="btn sm" for="fFile" style="cursor:pointer"><span data-tr="Dosya ya da görsel seç" data-en="Choose file or image">Dosya ya da görsel seç</span></label>
+              <input type="file" id="fFile" accept="image/png,image/jpeg,image/webp,.ics,.txt,.csv" hidden>
+            </div>
+            <textarea id="fText" aria-label="Friend course list" data-tr-ph="…ya da ders listesini buraya yapıştır (ör. ESE 3504 Şube 2, ME 3320-1)" data-en-ph="…or paste the course list here (e.g. ESE 3504 Section 2, ME 3320-1)" style="min-height:52px"></textarea>
+            <div class="row"><button class="btn sm" id="fPaste" data-tr="Listeden ekle" data-en="Add from list">Listeden ekle</button></div>
+            <span class="small" id="frNote"></span>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Advisor summary">
+          <h2><span data-tr="Danışman onayı özeti" data-en="Advisor approval summary">Danışman onayı özeti</span></h2>
+          <div class="pbody">
+            <span class="small" data-tr="Danışmanına göndermek için hazır metin: dersler, şubeler, AKTS, alttan dersler ve uyarılar." data-en="Ready-to-send text for your advisor: courses, sections, ECTS, repeats and warnings.">Danışmanına göndermek için hazır metin.</span>
+            <div class="summary" id="summary"></div>
+            <div class="row"><button class="btn sm" id="copySum" data-tr="Metni kopyala" data-en="Copy text">Metni kopyala</button><span class="small" id="sumNote"></span></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Calendar">
+          <h2><span data-tr="Takvime aktar" data-en="Export to calendar">Takvime aktar</span></h2>
+          <div class="pbody">
+            <div class="row small">
+              <label for="semStart" data-tr="Dönem başı" data-en="Term start">Dönem başı</label><input type="date" id="semStart" value="2026-10-19">
+              <label for="semEnd" data-tr="Son ders" data-en="Last class">Son ders</label><input type="date" id="semEnd" value="2027-01-08">
+            </div>
+            <span class="small" data-tr="Tarihleri akademik takvimden kontrol et." data-en="Check dates against the academic calendar.">Tarihleri akademik takvimden kontrol et.</span>
+            <div class="row"><button class="btn primary" id="gcalBtn" data-tr="Google Takvim'e ekle" data-en="Add to Google Calendar">Google Takvim'e ekle</button><button class="btn" id="icsBtn" data-tr="Takvim dosyası indir (.ics)" data-en="Download calendar file (.ics)">Takvim dosyası indir (.ics)</button></div>
+            <span class="small" id="gcalNote"></span>
+            <span class="small" id="icsNote"></span>
+            <div class="links" id="gcal"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// =================== i18n ===================
+let LANG="tr";
+const L=(tr,en)=>LANG==="en"?en:tr;
+function applyLang(){
+  document.documentElement.lang=LANG;
+  document.querySelectorAll("[data-tr]").forEach(el=>{el.textContent=el.getAttribute("data-"+LANG)});
+  document.querySelectorAll("[data-tr-ph]").forEach(el=>{el.placeholder=el.getAttribute("data-"+LANG+"-ph")});
+  $("lgTr").setAttribute("aria-pressed",LANG==="tr");$("lgEn").setAttribute("aria-pressed",LANG==="en");
+}
+
+// =================== Faculties & departments (aday.yasar.edu.tr) ===================
+const FACULTIES=[
+ {id:"eng",tr:"Mühendislik Fakültesi",en:"Faculty of Engineering",depts:[
+   {id:"ese",tr:"Enerji Sistemleri Mühendisliği",en:"Energy Systems Engineering",site:"https://ese.yasar.edu.tr/",sched:"https://ese.yasar.edu.tr/2026-2027-guz-yariyili-ders-programi/",cur:"ese"},
+   {id:"ce",tr:"Bilgisayar Mühendisliği",en:"Computer Engineering",site:"https://ce.yasar.edu.tr/",cur:"ce"},
+   {id:"eee",tr:"Elektrik-Elektronik Mühendisliği",en:"Electrical and Electronics Engineering",site:"https://eee.yasar.edu.tr/"},
+   {id:"ie",tr:"Endüstri Mühendisliği",en:"Industrial Engineering",site:"https://aday.yasar.edu.tr/endustri-muhendisligi-bolumu/"},
+   {id:"civ",tr:"İnşaat Mühendisliği",en:"Civil Engineering",site:"https://aday.yasar.edu.tr/insaat-muhendisligi-bolumu/"},
+   {id:"me",tr:"Makine Mühendisliği",en:"Mechanical Engineering",site:"https://aday.yasar.edu.tr/makine-muhendisligi-bolumu"},
+   {id:"se",tr:"Yazılım Mühendisliği",en:"Software Engineering",site:"https://se.yasar.edu.tr/"}]},
+ {id:"bus",tr:"İşletme Fakültesi",en:"Faculty of Business",depts:[
+   {id:"econ",tr:"Ekonomi",en:"Economics",site:"https://econ.yasar.edu.tr/"},
+   {id:"ba",tr:"İşletme",en:"Business Administration",site:"https://ba.yasar.edu.tr/"},
+   {id:"log",tr:"Lojistik Yönetimi",en:"Logistics Management",site:"https://aday.yasar.edu.tr/lojistik-yonetimi-bolumu/"},
+   {id:"itf",tr:"Uluslararası Ticaret ve Finansman",en:"International Trade and Finance",site:"https://aday.yasar.edu.tr/uluslararasi-ticaret-ve-finansman-bolumu/"}]},
+ {id:"hss",tr:"İnsan ve Toplum Bilimleri Fakültesi",en:"Faculty of Human and Social Sciences",depts:[
+   {id:"ell",tr:"İngiliz Dili ve Edebiyatı",en:"English Language and Literature",site:"https://aday.yasar.edu.tr/ingiliz-dili-ve-edebiyati-bolumu/"},
+   {id:"eti",tr:"İngilizce Mütercim ve Tercümanlık",en:"English Translation and Interpreting",site:"https://aday.yasar.edu.tr/ingilizce-mutercim-ve-tercumanlik-bolumu/"},
+   {id:"ir",tr:"Uluslararası İlişkiler",en:"International Relations",site:"https://aday.yasar.edu.tr/uluslararasi-iliskiler-bolumu/"},
+   {id:"psy",tr:"Psikoloji",en:"Psychology",site:"https://aday.yasar.edu.tr/psikoloji-bolumu/"}]},
+ {id:"com",tr:"İletişim Fakültesi",en:"Faculty of Communication",depts:[
+   {id:"vcd",tr:"Görsel İletişim Tasarımı",en:"Visual Communication Design",site:"https://aday.yasar.edu.tr/gorsel-iletisim-tasarimi-bolumu/"},
+   {id:"pra",tr:"Halkla İlişkiler ve Reklamcılık",en:"Public Relations and Advertising",site:"https://aday.yasar.edu.tr/halkla-iliskiler-ve-reklamcilik-bolumu/"},
+   {id:"rtc",tr:"Radyo, Televizyon ve Sinema",en:"Radio, Television and Cinema",site:"https://aday.yasar.edu.tr/radyo-televizyon-ve-sinema-bolumu/"},
+   {id:"nmc",tr:"Yeni Medya ve İletişim",en:"New Media and Communication",site:"https://aday.yasar.edu.tr/yeni-medya-ve-iletisim-bolumu/"}]},
+ {id:"arc",tr:"Mimarlık Fakültesi",en:"Faculty of Architecture",depts:[
+   {id:"arch",tr:"Mimarlık",en:"Architecture",site:"https://arch.yasar.edu.tr/"},
+   {id:"inar",tr:"İç Mimarlık ve Çevre Tasarımı",en:"Interior Architecture and Environmental Design",site:"https://aday.yasar.edu.tr/ic-mimarlik-ve-cevre-tasarimi-bolumu/"}]},
+ {id:"art",tr:"Sanat ve Tasarım Fakültesi",en:"Faculty of Art and Design",depts:[
+   {id:"anim",tr:"Çizgi Film ve Animasyon",en:"Animation",site:"https://animation.yasar.edu.tr/"},
+   {id:"id",tr:"Endüstriyel Tasarım",en:"Industrial Design",site:"https://aday.yasar.edu.tr/endustriyel-tasarim-bolumu/"},
+   {id:"mus",tr:"Müzik",en:"Music",site:"https://aday.yasar.edu.tr/muzik-bolumu/"}]},
+ {id:"law",tr:"Hukuk Fakültesi",en:"Faculty of Law",depts:[
+   {id:"law",tr:"Hukuk",en:"Law",site:"https://aday.yasar.edu.tr/hukuk-bolumu/"}]},
+ {id:"agr",tr:"Tarım Bilimleri ve Teknolojileri Fakültesi",en:"Faculty of Agricultural Sciences and Technologies",depts:[
+   {id:"agec",tr:"Tarım Ekonomisi",en:"Agricultural Economics",site:"https://fast.yasar.edu.tr/ogrenci/ders-programi/"},
+   {id:"amte",tr:"Tarım Makineleri ve Teknolojileri Müh.",en:"Agricultural Machinery and Technologies Eng.",site:"https://fast.yasar.edu.tr/ogrenci/ders-programi/"},
+   {id:"sspn",tr:"Toprak Bilimi ve Bitki Besleme",en:"Soil Science and Plant Nutrition",site:"https://fast.yasar.edu.tr/ogrenci/ders-programi/"}]},
+ {id:"sas",tr:"Uygulamalı Bilimler Yüksekokulu",en:"School of Applied Sciences",depts:[
+   {id:"gas",tr:"Gastronomi ve Mutfak Sanatları",en:"Gastronomy and Culinary Arts",site:"https://aday.yasar.edu.tr/gastronomi-ve-mutfak-sanatlari-bolumu/"},
+   {id:"tg",tr:"Turizm Rehberliği",en:"Tourism Guidance",site:"https://aday.yasar.edu.tr/turizm-rehberligi-bolumu"},
+   {id:"mis",tr:"Yönetim Bilişim Sistemleri",en:"Management Information Systems",site:"https://aday.yasar.edu.tr/yonetim-bilisim-sistemleri-bolumu/"}]},
+];
+const DEPTS=Object.fromEntries(FACULTIES.flatMap(f=>f.depts.map(d=>[d.id,{...d,fac:f.id}])));
+
+// =================== Curricula (official course plans) ===================
+// sem = curriculum semester; pre = prerequisite codes; preEcts = min passed ECTS; el = elective
+const CURRICULA={
+ ese:{label:"ESE Bologna",url:"https://obs.yasar.edu.tr/oibs/bologna/progCourses.aspx?lang=tr&curSunit=77",courses:[
+  ["ENGR 1115","Introduction to Programming",5,1],["MATH 1100","Mathematical Logic",5,1],["MATH 1131","Calculus I",7,1],["PHYS 1121","Physics I",7,1],["SOFL 1101","English for Academic Purposes I",4,1],["UMFD 1020","Foundations of Critical and Analytical Thinking",2,1],
+  ["CHEM 1130","Engineering Chemistry",6,2],["ESE 1110","Introduction to Energy Systems Engineering",2,2],["MATH 1132","Calculus II",7,2,["MATH 1131"]],["PHYS 1122","Physics II",7,2],["SOFL 1102","English for Academic Purposes II",4,2,["SOFL 1101"]],["UMFD 1120","Fundamentals of Entrepreneurship",2,2],["UMFD 1220","Foundations of Design-Oriented Thinking",2,2],
+  ["ENGR 2120","Introduction to Computer-Aided Modeling",5,3],["HIST 1110","Principles of Atatürk and History of Revolution I",2,3],["ISG 9110","Occupational Health and Safety I",2,3],["MATH 2230","Computational Methods in Engineering",6,3],["MATH 2263","Differential Equations and Dynamical Systems",7,3,["MATH 1131"]],["ME 2320","Thermodynamics",6,3],["TURK 1110","Turkish I",2,3],
+  ["EEE 2280","Electric Circuits and Systems",7,4],["ESE 2501","Measurement Techniques and Equipment",5,4],["HIST 1210","Principles of Atatürk and History of Revolution II",2,4],["ISG 9210","Occupational Health and Safety II",2,4],["MATH 2260","Probability and Statistics for Engineers",6,4],["ME 3330","Fluid Mechanics and Machinery",6,4],["TURK 1210","Turkish II",2,4],
+  ["EEE 3615","Electromechanical Energy Conversion",6,5,["EEE 2280"]],["EEE 3718","Feedback Control Systems",6,5,["MATH 2263"]],["ESE 3504","Smart Energy Systems",4,5],["ME 2710","Materials Science",4,5],["ME 3320","Heat and Mass Transfer",6,5],
+  ["ESE 3250","Solar Energy Systems",4,5,null,1],["ESE 3260","Wind Energy Systems",4,5,null,1],["ESE 3270","Geothermal Energy Systems",4,5,null,1],
+  ["ENGR 3450","Project Management",5,6],["ESE 3404","Energy Efficiency and Management",5,6],["ESE 3510","Power Conversion Systems",4,6,["EEE 2280"]],["EEE 3638","Power Systems",6,6],
+  ["ENGR 4400","Engineering Ethics and Seminar",2,7],["ENGR 4411","Engineering for Sustainable Development",3,7],["ESE 4910","Energy Systems Analysis",8,7,null,0,150],["UMFD 1720","Career Planning",2,7],
+  ["ESE 4212","Energy Storage Systems",6,7,null,1],["ESE 4222","Hydrogen Energy and Fuel Cell Systems",6,7,null,1],["ESE 4312","Energy Systems Modeling",6,7,null,1],["EEE 4231","Power Electronics",6,7,null,1],["COMP 4350","Introduction to Machine Learning",6,7,null,1],
+  ["ESE 4920","Energy Systems Design",8,8,["ESE 4910"]],
+ ]},
+ ce:{label:"CE curriculum",url:"https://ce.yasar.edu.tr/wp-content/uploads/2018/07/3-Mufredat-Yeni-v2.pdf",courses:[
+  ["MATH 1131","Calculus I",7,1],["PHYS 1121","Physics I",7,1],["MATH 1101","Analytical Reasoning",6,1],["SE 1105","Programming and Problem Solving I",6,1],["SOFL 1101","English for Academic Purposes I",4,1],
+  ["MATH 1132","Calculus II",7,2,["MATH 1131"]],["PHYS 1122","Physics II",7,2],["MATH 1202","Discrete Computational Structures",6,2],["COMP 1123","Data Structures I",6,2],["SOFL 1102","English for Academic Purposes II",4,2,["SOFL 1101"]],
+  ["MATH 2250","Applied Linear Algebra",7,3],["MATH 2240","Probability and Statistics for Engineers",7,3],["COMP 2213","Data Structures II",6,3,["COMP 1123"]],["EEE 2274","Fundamentals of Electronics",6,3],["HIST 1110","Principles of Atatürk and History of Revolution I",2,3],["TURK 1110","Turkish I",2,3],
+  ["MATH 3330","Automata Theory",6,4],["COMP 2215","Object Oriented Paradigms",7,4],["SE 2228","Analysis and Design of Algorithms",6,4],["EEE 2110","Digital Design",6,4],["HIST 1210","Principles of Atatürk and History of Revolution II",2,4],["TURK 1210","Turkish II",2,4],
+  ["COMP 3317","Computer Networks",7,5],["SE 2222","Database Systems",7,5],["COMP 3315","Computer Organization",7,5,["EEE 2110"]],["ECON 3300","Introduction to Engineering Economics",5,5],["ISG 9110","Occupational Health and Safety I",2,5],
+  ["COMP 3323","Operating Systems",6,6],["COMP 3328","Embedded Systems",7,6],["SE 3304","Introduction to Software Engineering",6,6],["ENGR 3450","Project Management",5,6],
+  ["COMP 4910","Senior Design Project I",8,7],["ENGR 4400","Engineering Ethics and Seminar",2,7],["COMP 4431","Computer Graphics",6,7,null,1],["COMP 4441","Cyber Security",6,7,null,1],
+  ["COMP 4920","Senior Design Project II",8,8,["COMP 4910"]],
+ ]},
+};
+function curOf(id){const c=CURRICULA[id];if(!c)return null;
+  return c.courses.map(([code,name,ects,sem,pre,el,preEcts])=>({code,name,ects,sem,year:Math.ceil(sem/2),pre:pre||[],el:!!el,preEcts:preEcts||0}))}
+
+// =================== Time grid ===================
+const SLOTS=["08:30","09:30","10:30","11:30","12:30","13:30","14:30","15:30","16:30","17:30","18:30","19:30"];
+const NS=SLOTS.length;
+const DAYS={tr:["Pzt","Sal","Çar","Per","Cum"],en:["Mon","Tue","Wed","Thu","Fri"]};
+const DAYS_LONG={tr:["Pazartesi","Salı","Çarşamba","Perşembe","Cuma"],en:["Monday","Tuesday","Wednesday","Thursday","Friday"]};
+const dn=d=>DAYS[LANG][d];
+const endTime=e=>{const [h,m]=SLOTS[e-1].split(":").map(Number);const mm=m+50;return `${String(h+Math.floor(mm/60)).padStart(2,"0")}:${String(mm%60).padStart(2,"0")}`};
+const fmtT=([d,s,l])=>`${dn(d)} ${SLOTS[s]}–${endTime(s+l)}`;
+const overlap=(a,b)=>a[0]===b[0]&&a[1]<b[1]+b[2]&&b[1]<a[1]+a[2];
+const secClash=(s1,s2)=>s1.t.some(a=>s2.t.some(b=>overlap(a,b)));
+
+// =================== Illustrative sections (until the real file is imported) ===================
+function rng(seed){let a=0;for(const ch of seed)a=(a*31+ch.charCodeAt(0))>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function blocksFor(ects){return ects>=6?[2,2]:ects>=4?[3]:[2]}
+function genSections(cur,deptId){
+  const r=rng(deptId+"|2026-27-guz");const offered=cur.filter(c=>c.sem%2===1).sort((a,b)=>b.year-a.year||a.el-b.el);
+  // Section 1 of a year's required courses never clash with each other; section 2 avoids next year's
+  // section 1s, so a student repeating a lower-year course can still build a clash-free week.
+  const occ={},occ2={};const out=[];
+  offered.forEach(c=>{
+    const yo=occ[c.year]||(occ[c.year]=new Set());const up=occ[c.year+1]||new Set();const yo2=occ2[c.year]||(occ2[c.year]=new Set());
+    const nSec=c.el?1+(r()<.5?1:0):c.year===1?3:2;
+    const secs=[];
+    for(let n=1;n<=nSec;n++){
+      let best=null;
+      for(let tries=0;tries<400&&!best;tries++){
+        const main=n===1&&!c.el;
+        const days=(main?[0,1,2,3]:[0,1,2,3,4]).sort(()=>r()-.5);const t=[];let ok=true;
+        blocksFor(c.ects).forEach((l,i)=>{const d=days[i];const lo=main&&r()<.7?1:0;const s=lo+Math.floor(r()*(9-l+1-lo));t.push([d,s,l]);
+          for(let k=s;k<s+l;k++){const key=d*20+k;
+            if(n===1&&!c.el&&yo.has(key))ok=false;
+            if(n===2&&!c.el&&tries<300&&(up.has(key)||yo2.has(key)))ok=false}});
+        if(ok)best=t;
+      }
+      if(best&&n===2&&!c.el)best.forEach(([d,s,l])=>{for(let k=s;k<s+l;k++)yo2.add(d*20+k)});
+      if(!best)best=[[n%5,(n*2)%8,2]];
+      if(n===1&&!c.el)best.forEach(([d,s,l])=>{for(let k=s;k<s+l;k++)yo.add(d*20+k)});
+      const cap=c.year===1?60:40;let taken=Math.floor(cap*(.45+r()*.5));
+      if(n>1&&r()<.18)taken=cap;
+      secs.push({n,t:best,q:[taken,cap]});
+    }
+    out.push({...c,secs});
+  });
+  // every year has at least one full section, so the waitlist can be tried
+  [1,2,3,4].forEach(y=>{const ys=out.filter(c=>c.year===y&&!c.el&&c.secs.length>1);
+    if(ys.length&&!ys.some(c=>c.secs.some(s=>s.q[0]>=s.q[1]))){const s=ys[0].secs[1];s.q[0]=s.q[1]}});
+  return out;
+}
+
+// =================== Excel / CSV import ===================
+let XLSXlib=null;
+function loadXLSX(){return new Promise((res,rej)=>{if(window.XLSX)return res(window.XLSX);
+  const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";s.onload=()=>res(window.XLSX);s.onerror=rej;document.head.appendChild(s)})}
+const CODE_RE=/\b([A-ZÇĞİÖŞÜ]{2,5})\s?(\d{3,4}[A-Z]?)\b/g;
+const DAY_RES=[/pazartesi|monday|\bmon\b|\bpzt\b/i,/salı|sali|tuesday|\btue\b|\bsal\b/i,/çarşamba|carsamba|wednesday|\bwed\b|\bçar\b/i,/perşembe|persembe|thursday|\bthu\b|\bper\b/i,/cuma|friday|\bfri\b|\bcum\b/i];
+const TIME_RE=/(\d{1,2})[:.](\d{2})/;
+function toSlot(hh,mm){const m=hh*60+mm;let best=0,bd=1e9;SLOTS.forEach((s,i)=>{const [h,mi]=s.split(":").map(Number);const dd=Math.abs(h*60+mi-m);if(dd<bd){bd=dd;best=i}});return best}
+function heuristicParse(sheets){
+  const map=new Map();
+  sheets.forEach(({name,rows,merges})=>{
+    let yearHint=null;const ym=name.match(/(\d)\s*\.?\s*(sınıf|sinif|year|class)/i);if(ym)yearHint=+ym[1];
+    let dayCols={},hdr=-1;
+    for(let r=0;r<Math.min(rows.length,15)&&hdr<0;r++){const row=rows[r]||[];const found={};
+      row.forEach((v,c)=>{const s=String(v??"");DAY_RES.forEach((re,d)=>{if(re.test(s)&&!Object.values(found).includes(d)&&!(c in found))found[c]=d})});
+      if(Object.keys(found).length>=3){dayCols=found;hdr=r}}
+    if(hdr<0)return;
+    const firstDay=Math.min(...Object.keys(dayCols).map(Number));
+    const span={};(merges||[]).forEach(m=>{span[m.s.r+"_"+m.s.c]=m.e.r-m.s.r+1});
+    for(let r=hdr+1;r<rows.length;r++){const row=rows[r]||[];let slot=null;
+      for(let c=0;c<Math.max(firstDay,1);c++){const tm=String(row[c]??"").match(TIME_RE);if(tm){slot=toSlot(+tm[1],+tm[2]);break}}
+      if(slot===null)continue;
+      for(const [cs,d] of Object.entries(dayCols)){const cell=String(row[cs]??"");if(!cell.trim())continue;
+        const len=span[r+"_"+cs]||1;
+        for(const m of cell.matchAll(CODE_RE)){
+          const code=`${m[1]} ${m[2]}`;const after=cell.slice(m.index+m[0].length);
+          const sm=after.match(/^\s*(?:[-–\/.(]\s*|\s+(?:Ş(?:ube)?|S(?:ec(?:tion)?)?\.?)\s*)0?(\d{1,2})\b/i);const n=sm?+sm[1]:1;
+          const nm=after.replace(/^[\s\-–\/.()\d]*/,"").split(/\n|\(|\[|\||;/)[0].replace(/\b(Ş(ube)?|Sec(tion)?)\b.*$/i,"").trim();
+          const key=code;if(!map.has(key))map.set(key,{code,name:nm.length>3&&nm.length<70?nm:"",year:yearHint,secs:new Map()});
+          const e=map.get(key);if(!e.name&&nm.length>3&&nm.length<70)e.name=nm;
+          if(!e.secs.has(n))e.secs.set(n,[]);e.secs.get(n).push([+d,slot,len]);
+        }}
+    }
+  });
+  return [...map.values()].map(e=>({code:e.code,name:e.name||e.code,year:e.year,secs:[...e.secs].sort((a,b)=>a[0]-b[0]).map(([n,t])=>({n,t:mergeBlocks(t)}))}));
+}
+function mergeBlocks(t){const s=[...t].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const out=[];
+  s.forEach(b=>{const last=out[out.length-1];if(last&&last[0]===b[0]&&last[1]+last[2]>=b[1]){last[2]=Math.max(last[2],b[1]+b[2]-last[1])}else out.push([...b])});return out}
+function sheetsToText(sheets){let s="";sheets.forEach(({name,rows})=>{s+=`### Sheet: ${name}\n`;rows.forEach((r,i)=>{const cells=(r||[]).map(v=>String(v??"").replace(/\s+/g," ").trim());if(cells.some(Boolean))s+=`R${i}: `+cells.join(" | ")+"\n"})});return s.slice(0,90000)}
+async function aiParse(sheets){
+  const prompt=`Below is a university department's weekly course timetable exported from Excel. Extract every course.
+Days: 0=Monday … 4=Friday. Return times as "HH:MM".
+Reply with ONLY a JSON array, one object per course:
+[{"code":"ESE 3504","name":"Smart Energy Systems","year":3,"sections":[{"n":1,"times":[{"day":0,"start":"09:30","end":"11:20"}]}]}]
+year = class year 1-4 if the sheet shows it, else null. Section numbers default to 1. Ignore rooms and instructors.
+
+${sheetsToText(sheets)}`;
+  const arr=await sample.json(prompt,{modelTier:"default"});
+  if(!Array.isArray(arr))throw {code:"invalid_json"};
+  return arr.filter(c=>c&&typeof c.code==="string").map(c=>({code:c.code.trim().toUpperCase().replace(/^([A-Z]+)\s*(\d)/,"$1 $2"),name:String(c.name||c.code),year:Number.isInteger(c.year)?c.year:null,
+    secs:(c.sections||[]).map(s=>({n:+s.n||1,t:mergeBlocks((s.times||[]).filter(x=>x&&x.day>=0&&x.day<=4&&TIME_RE.test(x.start||"")).map(x=>{const a=x.start.match(TIME_RE),b=String(x.end||"").match(TIME_RE);
+      const s0=toSlot(+a[1],+a[2]);let l=1;if(b){l=Math.max(1,Math.round(((+b[1])*60+(+b[2])-((+a[1])*60+(+a[2])))/60))}return [x.day,s0,Math.min(l,NS-s0)]}))})).filter(s=>s.t.length)})).filter(c=>c.secs.length);
+}
+function enrich(list,deptId){
+  const cur=curOf(DEPTS[deptId]?.cur);const byCode=Object.fromEntries((cur||[]).map(c=>[c.code,c]));
+  return list.map(c=>{const k=byCode[c.code];const y=c.year||k?.year||Math.min(4,Math.max(1,+(c.code.match(/\d/)||[1])[0]));
+    return {code:c.code,name:k?.name||c.name,ects:k?.ects??null,year:y,sem:k?.sem??(y*2-1),pre:k?.pre||[],preEcts:k?.preEcts||0,el:k?.el||false,
+      secs:c.secs.map(s=>({n:s.n,t:s.t,q:s.q||null}))}});
+}
+
+// =================== State ===================
+const store={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}},del(k){try{localStorage.removeItem(k)}catch{}}};
+let profile={fac:"eng",dept:"ese",year:3};
+let COURSES=[],BYCODE={},source="none"; // "ornek" | "import" | "shared" | "none"
+let picked=new Map(); // code -> section index | null
+let passed=new Set();
+let yearFilter="mine",query="";
+let alts=[],altI=0;const simFull=new Set();
+let constraints={freeDays:new Set(),minSlot:0,maxEnd:NS};
+let friends=[],groupFriends=[],sharedScheds={};
+let mobileDay=0;let showFriends=false;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+const C=code=>BYCODE[code];
+const simOpen=new Set(); // sections whose seat opened (demo or updated data)
+const quotaFull=(code,si)=>{const s=C(code).secs[si];return !!(s.q&&s.q[0]>=s.q[1])};
+const isFull=(code,si)=>{const k=code+"_"+si;if(simOpen.has(k))return false;return simFull.has(k)||quotaFull(code,si)};
+let watches=[]; // {code,si,n,notified}
+const isWatched=(code,si)=>watches.some(w=>w.code===code&&w.si===si&&!w.notified);
+const allFriends=()=>[...friends,...groupFriends.filter(f=>f.dept===profile.dept)];
+const ectsOf=c=>c?.ects||0;
+const colorOf=code=>(Object.keys(BYCODE).indexOf(code)%11)+1;
+
+function buildCourses(){
+  const d=DEPTS[profile.dept];const cur=curOf(d.cur);
+  const imp=store.get("ydp3_sched_"+profile.dept);
+  let list=null;
+  if(imp){try{list=JSON.parse(imp);source="import"}catch{}}
+  if(!list&&sharedScheds[profile.dept]){list=sharedScheds[profile.dept].courses;source="shared"}
+  if(list){COURSES=list}
+  else if(cur){COURSES=genSections(cur,profile.dept);source="ornek"}
+  else {COURSES=[];source="none"}
+  COURSES.sort((a,b)=>a.year-b.year||(a.el-b.el)||a.code.localeCompare(b.code));
+  BYCODE=Object.fromEntries(COURSES.map(c=>[c.code,c]));
+}
+function curPrevCourses(){const cur=curOf(DEPTS[profile.dept].cur);if(cur)return cur.filter(c=>c.sem<profile.year*2-1);
+  return COURSES.filter(c=>c.year<profile.year)}
+function defaultPassed(){passed=new Set(curPrevCourses().map(c=>c.code))}
+function autoPick(){
+  picked=new Map();
+  COURSES.forEach(c=>{
+    const mine=c.year===profile.year&&!c.el;
+    const repeat=c.year<profile.year&&!passed.has(c.code)&&!c.el;
+    if(mine||repeat){const si=c.secs.findIndex((s,i)=>!isFull(c.code,i));picked.set(c.code,si<0?null:si)}
+  });
+}
+function exampleFriends(){
+  const r=rng(profile.dept+"friends");const mk=(id,name,match)=>{const p={};COURSES.filter(c=>c.year===profile.year).forEach(c=>{p[c.code]=c.secs[Math.floor(r()*c.secs.length)].n});return {id,name,picks:p,src:"example",match}};
+  return COURSES.length?[mk("ex-"+Date.now(),L("Örnek arkadaş","Example friend"),false)]:[];
+}
+
+// =================== Analysis ===================
+function conflicts(map){
+  const arr=[...map].filter(([,s])=>s!==null),out=[];
+  for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){const [a,si]=arr[i],[b,sj]=arr[j];
+    if(secClash(C(a).secs[si],C(b).secs[sj]))out.push([a,b])}
+  return out;
+}
+function stats(map){
+  const occ=new Set(),days=new Set();let hours=0,gaps=0,early=0;
+  for(const [code,si] of map){if(si===null)continue;C(code).secs[si].t.forEach(([d,s,l])=>{days.add(d);hours+=l;for(let k=s;k<s+l;k++)occ.add(d*20+k);if(s===0)early++})}
+  for(let d=0;d<5;d++){const sl=[...occ].filter(x=>Math.floor(x/20)===d).map(x=>x%20);if(sl.length)gaps+=Math.max(...sl)-Math.min(...sl)+1-sl.length}
+  return {days:days.size,hours,gaps,early,dayset:days};
+}
+function passedEcts(){const cur=curOf(DEPTS[profile.dept].cur)||COURSES;let t=0;cur.forEach(c=>{if(passed.has(c.code))t+=c.ects||0});return t}
+function preMissing(c){const miss=c.pre.filter(p=>!passed.has(p));if(c.preEcts&&passedEcts()<c.preEcts)miss.push(L(`${c.preEcts} AKTS`,`${c.preEcts} ECTS`));return miss}
+function friendMatches(map){let n=0;const act=allFriends().filter(f=>f.match);
+  for(const [code,si] of map){if(si===null)continue;act.forEach(f=>{if(f.picks[code]===C(code).secs[si].n)n++})}return n}
+const friendsOn=(code,si)=>showFriends?allFriends().filter(f=>f.picks[code]===C(code).secs[si].n):[];
+const isRepeat=c=>c.year<profile.year&&!passed.has(c.code);
+
+// =================== Rendering ===================
+function renderProfile(){
+  const fac=$("fac"),dept=$("dept");
+  fac.innerHTML=FACULTIES.map(f=>`<option value="${f.id}">${esc(f[LANG])}</option>`).join("");fac.value=profile.fac;
+  const F=FACULTIES.find(f=>f.id===profile.fac);
+  dept.innerHTML=F.depts.map(d=>`<option value="${d.id}">${esc(d[LANG])}${d.cur||sharedScheds[d.id]||store.get("ydp3_sched_"+d.id)?"":" "+L("· program yüklenmedi","· not loaded")}</option>`).join("");dept.value=profile.dept;
+  $("yearSeg").innerHTML=[1,2,3,4].map(y=>`<button type="button" data-y="${y}" aria-pressed="${profile.year===y}">${y}</button>`).join("");
+  $("yearSeg").querySelectorAll("button").forEach(b=>b.onclick=()=>setProfile({year:+b.dataset.y}));
+  const D=DEPTS[profile.dept];const cur=CURRICULA[D.cur];
+  const srcBadge=source==="import"?`<span class="badge ok">${L("Program: senin yüklediğin dosya","Schedule: your imported file")}</span>`:
+    source==="shared"?`<span class="badge ok">${L("Program: bölüm arkadaşın yükledi","Schedule: shared by a classmate")}</span>`:
+    source==="ornek"?`<span class="badge warn">${L("Saatler ve kontenjanlar örnek","Times and quotas are examples")}</span>`:
+    `<span class="badge warn">${L("Ders programı yüklenmedi","No schedule loaded")}</span>`;
+  $("srcLine").innerHTML=`${srcBadge}${cur?`<span>${L("Dersler, AKTS, ön koşullar","Courses, ECTS, prerequisites")}: <a href="${cur.url}" target="_blank" rel="noopener">${esc(cur.label)}</a></span>`:""}
+    <span>${L("Bölüm sitesi","Department site")}: <a href="${D.sched||D.site}" target="_blank" rel="noopener">${esc(new URL(D.sched||D.site).host+new URL(D.sched||D.site).pathname.replace(/\/$/,""))}</a></span>`;
+}
+function renderYearFilter(){
+  const counts={all:COURSES.length};[1,2,3,4].forEach(y=>counts[y]=COURSES.filter(c=>c.year===y).length);
+  const btns=[["mine",L(`Benim sınıfım (${profile.year})`,`My year (${profile.year})`),counts[profile.year]],["all",L("Tümü","All"),counts.all],...[1,2,3,4].filter(y=>y!==profile.year).map(y=>[String(y),L(`${y}. sınıf`,`Year ${y}`),counts[y]])];
+  $("yearFilter").innerHTML=btns.map(([k,l,n])=>`<button class="fbtn" data-k="${k}" aria-pressed="${yearFilter===k}">${esc(l)}<span class="n">${n}</span></button>`).join("");
+  $("yearFilter").querySelectorAll("button").forEach(b=>b.onclick=()=>{yearFilter=b.dataset.k;renderYearFilter();renderCourses()});
+}
+function visibleCourses(){
+  const q=query.trim().toLocaleLowerCase("tr");
+  return COURSES.filter(c=>{
+    if(q)return c.code.toLocaleLowerCase("tr").includes(q)||c.name.toLocaleLowerCase("tr").includes(q);
+    if(yearFilter==="all")return true;
+    if(yearFilter==="mine")return c.year===profile.year||picked.has(c.code);
+    return c.year===+yearFilter;
+  });
+}
+function renderCourses(){
+  const box=$("courses");box.innerHTML="";
+  $("courseCount").textContent=COURSES.length?L(`${COURSES.length} ders`,`${COURSES.length} courses`):"";
+  if(!COURSES.length){
+    const D=DEPTS[profile.dept];
+    box.innerHTML=`<div class="empty"><h3>${L("Bu bölümün ders programı henüz yok","No schedule for this department yet")}</h3>
+      <span class="small">${L("Bölüm sitende yayınlanan Excel ders programını indirip aşağıdaki 'Bölüm ders programını yükle' alanına bırak. Dersler ve saatler otomatik çıkarılır; istersen tüm bölümünle paylaşırsın.","Download the Excel schedule from your department's site and drop it into 'Import your department's schedule' below. Courses and times are extracted automatically, and you can share them with your whole department.")}</span>
+      <div class="row"><a class="btn sm" href="${D.sched||D.site}" target="_blank" rel="noopener">${L("Bölüm sitesini aç","Open department site")}</a>
+      <button class="btn sm" id="tryEse">${L("Örnek olarak ESE'yi gör","See ESE as an example")}</button></div></div>`;
+    $("tryEse").onclick=()=>setProfile({fac:"eng",dept:"ese"});
+    return;
+  }
+  const chosen=[...picked].filter(([,s])=>s!==null);
+  const vis=visibleCourses();let lastY=null;
+  if(!vis.length){box.innerHTML=`<div class="empty small">${L("Eşleşen ders yok.","No matching courses.")}</div>`;return}
+  vis.forEach(c=>{
+    if(yearFilter!=="mine"&&c.year!==lastY){lastY=c.year;const g=document.createElement("div");g.className="ygroup";g.textContent=L(`${c.year}. sınıf`,`Year ${c.year}`);box.appendChild(g)}
+    const sel=picked.has(c.code);const miss=preMissing(c);
+    const tags=[];
+    if(isRepeat(c))tags.push(`<span class="t alt">${L("Alttan","Repeat")}</span>`);
+    else if(c.year<profile.year)tags.push(`<span class="t">${L(`${c.year}. sınıf dersi`,`Year ${c.year} course`)}</span>`);
+    if(c.year>profile.year)tags.push(`<span class="t">${L("Üst sınıf","Upper year")}</span>`);
+    if(c.el)tags.push(`<span class="t el">${L("Seçmeli","Elective")}</span>`);
+    if(miss.length)tags.push(`<span class="t pre">${L("Ön koşul eksik","Missing prerequisite")}: ${esc(miss.join(", "))}</span>`);
+    if(c.year<profile.year&&passed.has(c.code))tags.push(`<span class="t">${L("Geçildi","Passed")}</span>`);
+    const el=document.createElement("div");el.className="course";
+    el.innerHTML=`<div class="chead"><input type="checkbox" id="cb_${c.code.replace(/\W/g,"")}" ${sel?"checked":""}>
+      <label for="cb_${c.code.replace(/\W/g,"")}"><div class="code"><i class="swatch" style="background:var(--c${colorOf(c.code)})"></i>${esc(c.code)}</div><div class="cname">${esc(c.name)}</div>${tags.length?`<div class="tagsrow">${tags.join("")}</div>`:""}</label>
+      <span class="ects">${c.ects?c.ects+" "+L("AKTS","ECTS"):"—"}</span></div>`;
+    if(sel){
+      const secs=document.createElement("div");secs.className="secs";
+      c.secs.forEach((s,si)=>{
+        const full=isFull(c.code,si),on=picked.get(c.code)===si;
+        const clash=!on&&chosen.some(([o,sj])=>o!==c.code&&secClash(s,C(o).secs[sj]));
+        const b=document.createElement("button");b.type="button";
+        const watched=isWatched(c.code,si);
+        b.className="sec"+(on?" on":"")+(full?" full":"")+(clash?" clash":"")+(watched?" watched":"");
+        const frs=friendsOn(c.code,si).map(f=>`<span class="fr">${esc(f.name.split(" ")[0])}</span>`).join("");
+        const opened=simOpen.has(c.code+"_"+si)?" · "+L("yer açıldı","seat opened"):"";
+        const q=simFull.has(c.code+"_"+si)?L("Kayıt günü doldu","Filled on registration day"):full?L("Kontenjan dolu","Section full"):s.q?(()=>{const t=opened?Math.min(s.q[0],s.q[1]-1):s.q[0];return L(`${t}/${s.q[1]} dolu`,`${t}/${s.q[1]} taken`)+opened})():"";
+        const bell=full&&!on?`<br><span class="bell">${watched?L("🔔 Bekleme listesindesin","🔔 You're on the waitlist"):L("🔔 Boşalınca haber ver","🔔 Notify me when a seat opens")}</span>`:"";
+        b.innerHTML=`<b>${L("Şube","Sec.")} ${s.n}</b> · ${s.t.map(fmtT).join(", ")}<br><span class="q">${q}${clash?" · "+L("çakışır","clashes"):""}</span>${frs}${bell}`;
+        b.onclick=()=>{if(full&&!on){toggleWatch(c.code,si);return}picked.set(c.code,on?null:si);alts=[];update()};
+        secs.appendChild(b);
+      });
+      el.appendChild(secs);
+    }
+    el.querySelector("input").onchange=e=>{
+      if(e.target.checked){const f=c.secs.findIndex((s,i)=>!isFull(c.code,i));picked.set(c.code,f<0?null:f)}else picked.delete(c.code);
+      alts=[];update();
+    };
+    box.appendChild(el);
+  });
+}
+function blocksOfPicked(){
+  const blocks=[0,1,2,3,4].map(()=>[]);
+  for(const [code,si] of picked){if(si===null)continue;const c=C(code),s=c.secs[si];s.t.forEach(t=>blocks[t[0]].push({c,s,t,si}))}
+  blocks.forEach(list=>{list.sort((a,b)=>a.t[1]-b.t[1]);list.forEach(b=>{b.clash=list.some(o=>o!==b&&overlap(o.t,b.t))})});
+  return blocks;
+}
+function renderGrid(){
+  const tt=$("tt");
+  tt.innerHTML='<div></div>'+[0,1,2,3,4].map(i=>`<div class="dh${constraints.freeDays.has(i)?" free":""}">${dn(i)}${constraints.freeDays.has(i)?" · "+L("boş","free"):""}</div>`).join("");
+  const times=document.createElement("div");times.className="times";times.innerHTML=SLOTS.map(s=>`<div>${s}</div>`).join("");tt.appendChild(times);
+  const blocks=blocksOfPicked();
+  blocks.forEach(list=>{
+    const col=document.createElement("div");col.className="day";const lanes=[];
+    list.forEach(b=>{let l=lanes.findIndex(end=>end<=b.t[1]);if(l<0){l=lanes.length;lanes.push(0)}lanes[l]=b.t[1]+b.t[2];b.lane=l});
+    list.forEach(b=>{const peers=list.filter(o=>overlap(o.t,b.t));const n=Math.max(...peers.map(p=>p.lane))+1;
+      const d=document.createElement("div");d.className="blk"+(b.clash?" clash":"");
+      d.style.cssText=`top:calc(var(--h)*${b.t[1]} + 2px);height:calc(var(--h)*${b.t[2]} - 4px);left:calc(${b.lane*100/n}% + 3px);width:calc(${100/n}% - 6px);background-color:var(--c${colorOf(b.c.code)})`;
+      const frs=friendsOn(b.c.code,b.si).map(f=>f.name.split(" ")[0]).join(", ");
+      d.innerHTML=`<b>${esc(b.c.code)}/${b.s.n}</b><span>${esc(b.c.name)}</span>${frs?`<span>👥 ${esc(frs)}</span>`:""}`;col.appendChild(d)});
+    tt.appendChild(col);
+  });
+  // phone view
+  $("dtabs").innerHTML=[0,1,2,3,4].map(i=>`<button type="button" data-d="${i}" aria-pressed="${mobileDay===i}">${dn(i)}${blocks[i].some(b=>b.clash)?'<i class="dot"></i>':""}</button>`).join("");
+  $("dtabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{mobileDay=+b.dataset.d;renderGrid()});
+  const ml=$("mlist");const day=blocks[mobileDay];
+  ml.innerHTML=day.length?"":`<div class="small">${constraints.freeDays.has(mobileDay)?L("Boş gün 🎉","Day off 🎉"):L("Bu gün ders yok.","No classes this day.")}</div>`;
+  day.forEach(b=>{const it=document.createElement("div");it.className="mitem";
+    it.innerHTML=`<div class="tm">${SLOTS[b.t[1]]}<br>${endTime(b.t[1]+b.t[2])}</div><div class="bx${b.clash?" clash":""}" style="background:var(--c${colorOf(b.c.code)})"><b>${esc(b.c.code)} · ${L("Şube","Sec.")} ${b.s.n}</b><div>${esc(b.c.name)}</div>${b.clash?`<span style="color:var(--bad);font-weight:700">${L("Çakışma","Clash")}</span>`:""}</div>`;ml.appendChild(it)});
+}
+function renderPassed(){
+  const prev=curPrevCourses();const box=$("passed");
+  if(!prev.length){box.innerHTML=`<span class="small">${profile.year===1?L("1. sınıfta geçmiş ders yok.","No earlier courses in year 1."):L("Bu bölüm için müfredat yok; alttan derslerini listeden 'Tümü' ile seçebilirsin.","No curriculum for this department; pick repeat courses from 'All'.")}</span>`;$("passedCount").textContent="";return}
+  const bySem={};prev.forEach(c=>(bySem[c.sem]||(bySem[c.sem]=[])).push(c));
+  box.innerHTML="";
+  Object.keys(bySem).sort((a,b)=>a-b).forEach(sem=>{
+    const g=document.createElement("div");g.className="psem";g.innerHTML=`<h4>${L(`${sem}. yarıyıl`,`Semester ${sem}`)}</h4>`;
+    bySem[sem].forEach(c=>{const id="p_"+c.code.replace(/\W/g,"");const r=document.createElement("label");r.className="pitem";r.htmlFor=id;
+      r.innerHTML=`<input type="checkbox" id="${id}" ${passed.has(c.code)?"checked":""}><span class="code">${esc(c.code)}</span><span>${esc(c.name)}</span>`;
+      r.querySelector("input").onchange=e=>{
+        if(e.target.checked){passed.add(c.code);if(BYCODE[c.code]&&C(c.code).year<profile.year)picked.delete(c.code)}
+        else{passed.delete(c.code);if(BYCODE[c.code]&&!picked.has(c.code)){const si=C(c.code).secs.findIndex((s,i)=>!isFull(c.code,i));picked.set(c.code,si<0?null:si);
+          flash(["info",L(`${c.code} alttan olarak programına eklendi.`,`${c.code} was added to your timetable as a repeat.`)])}
+          else if(!BYCODE[c.code])flash(["warn",L(`${c.code} bu dönem açılmıyor; bahar döneminde alman gerekecek.`,`${c.code} isn't offered this term; you'll need to take it in spring.`)])}
+        savePassed();alts=[];update();
+      };g.appendChild(r)});
+    box.appendChild(g);
+  });
+  $("passedCount").textContent=L(`${[...passed].length} ders · ${passedEcts()} AKTS`,`${[...passed].length} courses · ${passedEcts()} ECTS`);
+}
+// Plan B
+function backupFor(code,map){
+  const si=map.get(code),c=C(code);const others=[...map].filter(([o,s])=>o!==code&&s!==null);
+  const ok=(s,list)=>list.every(([o,sj])=>!secClash(s,C(o).secs[sj]));
+  for(let k=0;k<c.secs.length;k++){if(k===si||isFull(code,k))continue;if(ok(c.secs[k],others))return {sec:k}}
+  for(let k=0;k<c.secs.length;k++){if(k===si||isFull(code,k))continue;
+    for(const [o,sj] of others)for(let m=0;m<C(o).secs.length;m++){if(m===sj||isFull(o,m))continue;
+      const list=others.map(([a,b])=>a===o?[a,m]:[a,b]);if(ok(c.secs[k],list)&&!conflicts(new Map(list)).length)return {sec:k,move:[o,m]}}}
+  return null;
+}
+function renderPlanB(){
+  const body=$("planB");const cl=conflicts(picked);const rows=[...picked].filter(([,s])=>s!==null);let none=0,tight=0;
+  const rp=$("riskPill");
+  if(!rows.length||cl.length){body.innerHTML=`<tr><td colspan="4" class="small">${cl.length?L("Önce çakışmaları çöz; B planı çakışmasız program üzerinden hesaplanır.","Resolve clashes first; Plan B is calculated from a clash-free timetable."):L("Ders seçince yedekler burada görünür.","Backups appear once you pick courses.")}</td></tr>`;
+    rp.className="pill idle";rp.textContent="—";$("riskTxt").textContent=L("Yedeği olmayan ders","Courses without a backup");return}
+  body.innerHTML="";
+  rows.forEach(([code,si])=>{const c=C(code),s=c.secs[si],b=backupFor(code,picked);const fill=s.q?s.q[0]/s.q[1]:0;if(fill>=.9)tight++;
+    let txt;if(!b){none++;txt=`<span class="risk bad">${L("Yedek yok","No backup")}</span>`}
+    else if(!b.move)txt=`${L("Şube","Section")} ${c.secs[b.sec].n}<br><span class="small">${c.secs[b.sec].t.map(fmtT).join(", ")}</span>`;
+    else{const o=C(b.move[0]);txt=L(`Şube ${c.secs[b.sec].n} + <b>${esc(o.code)}</b> Şube ${o.secs[b.move[1]].n}'e`,`Section ${c.secs[b.sec].n} + move <b>${esc(o.code)}</b> to Sec. ${o.secs[b.move[1]].n}`)}
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td><span class="code">${esc(c.code)}</span>${esc(c.name)}</td><td>${L("Şube","Sec.")} ${s.n}${s.q?`<br><span class="risk ${fill>=.9?"warn":"ok"}">${s.q[0]}/${s.q[1]}</span>`:""}</td><td>${txt}</td><td></td>`;
+    const btn=document.createElement("button");btn.className="btn sm";btn.type="button";btn.textContent=L("Doldu","Full");
+    btn.onclick=()=>{simFull.add(code+"_"+si);
+      if(b){picked.set(code,b.sec);if(b.move)picked.set(b.move[0],b.move[1]);flash(["ok",L(`${code} Şube ${s.n} doldu. Şube ${c.secs[b.sec].n}'e geçtin${b.move?`, ${b.move[0]} de kaydırıldı`:""}. Program hâlâ çakışmasız.`,`${code} Section ${s.n} filled up. You're now in Section ${c.secs[b.sec].n}${b.move?` and ${b.move[0]} was shifted`:""}. Still clash-free.`)])}
+      else{picked.set(code,null);flash(["bad",L(`${code} Şube ${s.n} doldu ve çakışmasız yedek yok. Danışmanınla kontenjan açılmasını konuş.`,`${code} Section ${s.n} filled up and there's no clash-free backup. Ask your advisor about extra quota.`)])}
+      alts=[];update()};
+    tr.lastElementChild.appendChild(btn);body.appendChild(tr)});
+  if(none){rp.className="pill bad";rp.textContent=L(`${none} ders yedeksiz`,`${none} without backup`)}else{rp.className=tight?"pill warn":"pill ok";rp.textContent=L("Hepsinin yedeği var","All have backups")}
+  $("riskTxt").textContent=tight?L(`${tight} şube %90 üzeri dolu`,`${tight} sections over 90% full`):L("Kontenjanlar rahat","Quotas look fine");
+}
+// Friends
+function renderFriends(){
+  const box=$("friends");const list=allFriends();
+  if(!list.length){box.innerHTML=`<p class="small">${L("Henüz arkadaş yok. Kodunu paylaş ya da arkadaşının kodunu ekle.","No friends yet. Share your code or add a friend's.")}</p>`;return}
+  box.innerHTML="";
+  list.forEach(f=>{const common=Object.keys(f.picks).filter(code=>picked.has(code));
+    const same=common.filter(code=>{const si=picked.get(code);return si!==null&&BYCODE[code]&&C(code).secs[si].n===f.picks[code]});
+    const row=document.createElement("div");row.className="friend";
+    const av=document.createElement("div");av.className="av";av.textContent=f.name.trim().charAt(0).toUpperCase()||"?";
+    const info=document.createElement("div");info.className="info";const nm=document.createElement("div");nm.style.fontWeight="700";nm.textContent=f.name;
+    const sub=document.createElement("div");sub.className="small";sub.textContent=L(`${common.length} ortak ders · ${same.length} aynı şube`,`${common.length} shared · ${same.length} same section`);
+    info.append(nm,sub);const lab=document.createElement("label");const cb=document.createElement("input");cb.type="checkbox";cb.checked=!!f.match;
+    cb.onchange=()=>{f.match=cb.checked;if(alts.length)generate();else update()};lab.append(cb,L("Eşleş","Match"));row.append(av,info,lab);
+    if(f.src==="code"){const x=document.createElement("button");x.className="btn sm";x.textContent=L("Sil","Remove");x.onclick=()=>{friends=friends.filter(o=>o!==f);saveFriends();update()};row.appendChild(x)}
+    box.appendChild(row)});
+}
+function myPicks(){const o={};for(const [code,si] of picked)if(si!==null)o[code]=C(code).secs[si].n;return o}
+function myCode(){return "YDP3."+btoa(unescape(encodeURIComponent(JSON.stringify({n:$("myName").value.trim()||"?",d:profile.dept,p:myPicks()}))))}
+function saveFriends(){store.set("ydp3_friends",JSON.stringify(friends.filter(f=>f.src==="code")))}
+// Summary
+function summaryText(){
+  const D=DEPTS[profile.dept];const name=$("myName").value.trim();const lines=[];
+  lines.push(L("DERS KAYIT ÖZETİ — 2026-27 Güz","COURSE REGISTRATION SUMMARY — 2026-27 Fall"));
+  lines.push(`${name?name+" · ":""}${D[LANG]} · ${L(`${profile.year}. sınıf`,`Year ${profile.year}`)}`);lines.push("");
+  let tot=0;
+  [...picked].forEach(([code,si])=>{const c=C(code);tot+=ectsOf(c);
+    const tag=[isRepeat(c)?L("ALTTAN","REPEAT"):"",c.el?L("seçmeli","elective"):"",preMissing(c).length?L("ön koşul eksik: ","missing prereq: ")+preMissing(c).join(", "):""].filter(Boolean).join("; ");
+    lines.push(`• ${code} ${c.name} — ${si===null?L("şube seçilmedi","no section"):L("Şube ","Sec. ")+c.secs[si].n+" ("+c.secs[si].t.map(fmtT).join(", ")+")"} — ${c.ects??"?"} ${L("AKTS","ECTS")}${tag?"  ["+tag+"]":""}`)});
+  lines.push("");lines.push(L(`Toplam: ${tot} AKTS · ${conflicts(picked).length?"ÇAKIŞMA VAR":"çakışma yok"}`,`Total: ${tot} ECTS · ${conflicts(picked).length?"HAS CLASHES":"no clashes"}`));
+  const failed=curPrevCourses().filter(c=>!passed.has(c.code)&&!BYCODE[c.code]);
+  if(failed.length)lines.push(L(`Bu dönem açılmayan alttan dersler: ${failed.map(c=>c.code).join(", ")}`,`Failed courses not offered this term: ${failed.map(c=>c.code).join(", ")}`));
+  const pb=[...picked].filter(([,s])=>s!==null).map(([code])=>{const b=conflicts(picked).length?null:backupFor(code,picked);return b?`${code}→${L("Ş","S")}${C(code).secs[b.sec].n}`:null}).filter(Boolean);
+  if(pb.length)lines.push(L(`B planı: ${pb.join(", ")}`,`Plan B: ${pb.join(", ")}`));
+  return lines.join("\n");
+}
+// Calendar
+function sessions(){const out=[];for(const [code,si] of picked){if(si===null)continue;const c=C(code),s=c.secs[si];s.t.forEach(t=>out.push({c,s,t}))}return out}
+function firstDate(day){const d=new Date($("semStart").value+"T00:00:00Z");if(isNaN(d))return null;const wd=(d.getUTCDay()+6)%7;d.setUTCDate(d.getUTCDate()+((day-wd+7)%7));return d}
+function utcStamp(date,hhmm){const [h,m]=hhmm.split(":").map(Number);const d=new Date(date);d.setUTCHours(h-3,m,0,0);return d.toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"")}
+function untilStamp(){const e=$("semEnd").value;return e?e.replace(/-/g,"")+"T205959Z":""}
+function buildICS(){const now=new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"");
+  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Yasar Ders Planlayici//TR","CALSCALE:GREGORIAN"];
+  sessions().forEach(({c,s,t},i)=>{const fd=firstDate(t[0]);if(!fd)return;
+    lines.push("BEGIN:VEVENT",`UID:ydp3-${c.code.replace(/\s/g,"")}-${s.n}-${i}@yasar-planner`,`DTSTAMP:${now}`,`DTSTART:${utcStamp(fd,SLOTS[t[1]])}`,`DTEND:${utcStamp(fd,endTime(t[1]+t[2]))}`,
+      `RRULE:FREQ=WEEKLY;UNTIL=${untilStamp()}`,`SUMMARY:${c.code} ${c.name} (${L("Şube","Section")} ${s.n})`,"LOCATION:Yaşar Üniversitesi","END:VEVENT")});
+  lines.push("END:VCALENDAR");return lines.join("\r\n")}
+function renderGcal(){const box=$("gcal");box.innerHTML="";
+  sessions().forEach(({c,s,t})=>{const fd=firstDate(t[0]);if(!fd)return;const u=new URL("https://calendar.google.com/calendar/render");
+    u.searchParams.set("action","TEMPLATE");u.searchParams.set("text",`${c.code} ${c.name} (${L("Şube","Section")} ${s.n})`);
+    u.searchParams.set("dates",`${utcStamp(fd,SLOTS[t[1]])}/${utcStamp(fd,endTime(t[1]+t[2]))}`);u.searchParams.set("recur",`RRULE:FREQ=WEEKLY;UNTIL=${untilStamp()}`);u.searchParams.set("location","Yaşar Üniversitesi");
+    const a=document.createElement("a");a.href=u.toString();a.target="_blank";a.rel="noopener";a.textContent=`+ ${c.code} · ${fmtT(t)}`;box.appendChild(a)});
+  $("icsBtn").disabled=!sessions().length||conflicts(picked).length>0;
+  if(!$("icsNote").dataset.locked)$("icsNote").textContent=downloads?L("Google Takvim, Apple Takvim ve Outlook açar. Ya da tek tek ekle:","Opens in Google, Apple Calendar and Outlook. Or add one by one:"):L("Bu görünümde dosya indirilemiyor. Google Takvim'e tek tek ekle:","Files can't be downloaded here. Add to Google Calendar one by one:");
+}
+
+// =================== Waitlist ===================
+let mcp=null;
+function saveWatches(){store.set("ydp3_watch_"+profile.dept,JSON.stringify(watches))}
+function loadWatches(){try{const w=JSON.parse(store.get("ydp3_watch_"+profile.dept)||"[]");watches=Array.isArray(w)?w.filter(x=>x&&BYCODE[x.code]&&C(x.code).secs[x.si]):[]}catch{watches=[]}}
+function toggleWatch(code,si){
+  const i=watches.findIndex(w=>w.code===code&&w.si===si&&!w.notified);
+  if(i>=0){watches.splice(i,1);flash(["info",L(`${code} Şube ${C(code).secs[si].n} bekleme listesinden çıkarıldı.`,`${code} Section ${C(code).secs[si].n} removed from your waitlist.`)])}
+  else{watches.push({code,si,n:C(code).secs[si].n,notified:false,at:Date.now()});
+    flash(["ok",L(`${code} Şube ${C(code).secs[si].n} bekleme listende. Yer açılınca haber vereceğiz${$("wEmail").value.trim()?"":"; e-posta için aşağıya adresini yaz"}.`,`${code} Section ${C(code).secs[si].n} is on your waitlist. We'll tell you when a seat opens${$("wEmail").value.trim()?"":"; add your email below to get an email"}.`)])}
+  saveWatches();update();
+}
+function renderWatches(){
+  const box=$("wList");$("wCount").textContent=watches.length?L(`${watches.filter(w=>!w.notified).length} bekleniyor`,`${watches.filter(w=>!w.notified).length} waiting`):"";
+  if(!watches.length){box.innerHTML=`<span class="small">${L("Henüz bekleme yok. Ders listesinde kesik çizgili (dolu) bir şubeye tıkla.","Nothing yet. Tap a dashed (full) section in the course list.")}</span>`;return}
+  box.innerHTML="";
+  watches.forEach(w=>{const c=C(w.code);const s=c.secs[w.si];
+    const it=document.createElement("div");it.className="witem"+(w.notified?" done":"");
+    const info=document.createElement("div");info.className="info";
+    info.innerHTML=`<b>${esc(w.code)} · ${L("Şube","Sec.")} ${w.n}</b><div class="small">${esc(c.name)} · ${s.t.map(fmtT).join(", ")}</div><div class="small">${w.notified?(w.mail?L("✓ Yer açıldı, e-posta gönderildi","✓ Seat opened, email sent"):L("✓ Yer açıldı, haber verildi","✓ Seat opened, you were alerted")):L("Bekleniyor","Waiting")}</div>`;
+    it.appendChild(info);
+    if(w.notified){const b=document.createElement("button");b.className="btn sm primary";b.textContent=L("Bu şubeye geç","Switch to this section");
+      b.onclick=()=>{picked.set(w.code,w.si);watches=watches.filter(x=>x!==w);saveWatches();alts=[];update()};it.appendChild(b)}
+    else{const d=document.createElement("button");d.className="btn sm";d.textContent=L("Yer açıldı (demo)","Seat opened (demo)");
+      d.title=L("Kontenjanın boşalmasını canlandırır","Simulates a seat opening");
+      d.onclick=()=>{simOpen.add(w.code+"_"+w.si);simFull.delete(w.code+"_"+w.si);update()};it.appendChild(d)}
+    const x=document.createElement("button");x.className="btn sm";x.textContent=L("Kaldır","Remove");x.onclick=()=>{watches=watches.filter(o=>o!==w);saveWatches();update()};it.appendChild(x);
+    box.appendChild(it)});
+}
+function checkWatches(){
+  watches.filter(w=>!w.notified&&BYCODE[w.code]&&!isFull(w.code,w.si)).forEach(w=>{
+    w.notified=true;const c=C(w.code);
+    flash(["ok",L(`🔔 ${w.code} Şube ${w.n} için yer açıldı! Bekleme listesinden tek tıkla geçebilirsin.`,`🔔 A seat opened in ${w.code} Section ${w.n}! Switch from the waitlist with one tap.`)]);
+    const email=$("wEmail").value.trim();if(email)sendSeatEmail(w,c,email);else $("wNote").textContent=L("E-posta adresi girilmediği için sadece sayfada bildirildi.","No email address entered, so you were only alerted on this page.");
+  });
+  saveWatches();
+}
+function localIso(ms){const d=new Date(ms+3*3600e3);return d.toISOString().slice(0,19)}
+async function sendSeatEmail(w,c,email){
+  const note=$("wNote");
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){note.textContent=L("E-posta adresi geçersiz görünüyor.","That email address doesn't look right.");return}
+  if(!mcp){note.textContent=L("E-posta bu görünümde gönderilemiyor; bildirim sadece sayfada gösterildi.","Email can't be sent from this view; you were alerted on this page only.");return}
+  note.textContent=L("E-posta bildirimi gönderiliyor…","Sending the email notification…");
+  const s=c.secs[w.si];const now=Date.now();
+  const summary=L(`Kontenjan açıldı: ${w.code} Şube ${w.n}`,`Seat open: ${w.code} Section ${w.n}`);
+  const desc=L(`${w.code} ${c.name} dersinin ${w.n}. şubesinde yer açıldı (${s.t.map(fmtT).join(", ")}).<br>OBS'ye girip hemen kaydol. — Yaşar Ders Planlayıcı`,`A seat opened in ${w.code} ${c.name}, Section ${w.n} (${s.t.map(fmtT).join(", ")}).<br>Log in to OBS and register now. — Yaşar Course Planner`);
+  try{
+    await mcp.callTool("Google Calendar","create_event",{summary,description:desc,startTime:localIso(now+2*60e3),endTime:localIso(now+17*60e3),timeZone:"Europe/Istanbul",
+      attendees:[{email}],notificationLevel:"ALL",overrideReminders:[{method:"email",minutes:0},{method:"popup",minutes:0}],availability:"AVAILABILITY_FREE"});
+    w.mail=email;saveWatches();renderWatches();
+    note.textContent=L(`E-posta bildirimi ${email} adresine gönderildi (Google Takvim üzerinden).`,`Email notification sent to ${email} (through Google Calendar).`);
+  }catch(e){
+    const code=e?.code;
+    note.textContent=code==="server_not_connected"?L("E-posta için Google Takvim bağlı değil: claude.ai Ayarlar → Bağlayıcılar'dan ekle. Bildirim sayfada gösterildi.","Google Calendar isn't connected for email: add it in claude.ai Settings → Connectors. You were alerted on this page."):
+      code==="needs_reauth"?L("Google Takvim bağlantısını claude.ai Ayarlar → Bağlayıcılar'dan yenile.","Reconnect Google Calendar in claude.ai Settings → Connectors."):
+      code==="not_in_manifest"||code==="approval_required"?L("E-posta izni verilmedi; bildirim sadece sayfada gösterildi.","Email permission wasn't given; you were alerted on this page only."):
+      L("E-posta gönderilemedi; bildirim sayfada gösterildi.","The email couldn't be sent; you were alerted on this page.");
+  }
+}
+
+// =================== Friend timetable upload ===================
+function picksFromText(text){
+  const picks={};
+  for(const m of text.matchAll(/\b([A-ZÇĞİÖŞÜ]{2,5})\s?(\d{3,4}[A-Z]?)\b([^\n]{0,40})/g)){
+    const code=`${m[1]} ${m[2]}`;const tail=m[3]||"";
+    const sm=tail.match(/^\s*(?:[-–\/.(]\s*0?(\d{1,2})\b|[^\n]*?(?:^|[\s,;(])(?:Şube|Ş|Section|Sec|S)\.?\s*0?(\d{1,2})\b)/i);
+    let n=sm?+(sm[1]||sm[2]):null;
+    if(!n&&BYCODE[code]){ // match by day/time when a section number is missing
+      const tm=tail.match(TIME_RE);if(tm){const slot=toSlot(+tm[1],+tm[2]);const hit=C(code).secs.find(s=>s.t.some(t=>t[1]===slot));if(hit)n=hit.n}}
+    picks[code]=n||picks[code]||1;
+  }
+  return picks;
+}
+function picksFromICS(text){
+  const lines=text.replace(/\r\n[ \t]/g,"").split(/\r?\n/).filter(l=>/^SUMMARY/i.test(l)).map(l=>l.replace(/^SUMMARY[^:]*:/i,""));
+  return picksFromText(lines.join("\n"));
+}
+async function picksFromImage(file){
+  if(!sample)throw {code:"no_ai"};
+  const lim=await sample.limits().catch(()=>null);if(!lim?.images)throw {code:"no_img"};
+  const known=COURSES.map(c=>`${c.code}: `+c.secs.map(s=>`S${s.n} ${s.t.map(t=>`${DAYS.en[t[0]]} ${SLOTS[t[1]]}`).join("/")}`).join("; ")).join("\n");
+  const arr=await sample.json(`This image is a university student's weekly timetable (often a screenshot from the OBS student system). List every course in it.
+Reply with ONLY a JSON array: [{"code":"ESE 3504","section":2}]. If the section number isn't shown, infer it by matching the day/time against these known sections, else use null:
+${known.slice(0,20000)}`,{images:file,modelTier:"default"});
+  const picks={};(Array.isArray(arr)?arr:[]).forEach(x=>{if(x&&typeof x.code==="string"){const code=x.code.trim().toUpperCase().replace(/^([A-ZÇĞİÖŞÜ]+)\s*(\d)/,"$1 $2");picks[code]=Number.isInteger(x.section)?x.section:1}});
+  return picks;
+}
+function addFriendPicks(picks,how){
+  const name=$("fName").value.trim()||L("Arkadaş","Friend");const n=Object.keys(picks).length;
+  if(!n){$("frNote").textContent=L("Ders kodu bulunamadı. Ders kodlarının (ör. ESE 3504) göründüğünden emin ol.","No course codes found. Make sure course codes (e.g. ESE 3504) are visible.");return}
+  const known=Object.keys(picks).filter(c=>BYCODE[c]).length;
+  friends.push({id:"f"+Date.now(),name:name.slice(0,40),dept:profile.dept,picks,src:"code",match:false});saveFriends();
+  $("fName").value="";$("fText").value="";
+  $("frNote").textContent=L(`${name}: ${n} ders bulundu (${how}), ${known} tanesi bu dönem senin listende. Aynı programı kurmak için "Arkadaşımla aynı programı oluştur"u kullan.`,`${name}: ${n} courses found (${how}), ${known} of them in your list this term. Use "Build the same timetable as my friend" to align.`);
+  if(alts.length)generate();else update();
+}
+$("fPaste").onclick=()=>addFriendPicks(picksFromText($("fText").value.toUpperCase().replace(/ŞUBE/g,"Şube")),L("metin","text"));
+$("fFile").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;const note=$("frNote");
+  try{
+    if(f.type.startsWith("image/")){note.textContent=L("Yapay zeka görseli okuyor…","The AI is reading the image…");addFriendPicks(await picksFromImage(f),L("görsel","image"))}
+    else{const t=await f.text();addFriendPicks(/BEGIN:VCALENDAR/.test(t)?picksFromICS(t):picksFromText(t),f.name.endsWith(".ics")?L("takvim dosyası","calendar file"):L("dosya","file"))}
+  }catch(err){note.textContent=err?.code==="no_ai"||err?.code==="no_img"||err?.code==="not_granted"?L("Görsel okumak için yapay zeka bu görünümde kullanılamıyor. Takvim dosyası ya da ders listesi dene.","The AI can't read images in this view. Try a calendar file or a pasted list."):L("Dosya okunamadı. Başka bir görsel ya da ders listesi dene.","Couldn't read that file. Try another image or a pasted list.")}
+};
+
+
+// =================== Same timetable as a friend ===================
+function openSame(){
+  const list=allFriends();const row=$("sameRow");row.hidden=false;
+  const sel=$("sameSel");
+  sel.innerHTML=list.length?list.map(f=>`<option value="${esc(f.id)}">${esc(f.name)}</option>`).join(""):`<option value="">${L("Önce arkadaş ekle","Add a friend first")}</option>`;
+  $("sameGo").disabled=!list.length;
+  $("sameNote").textContent=list.length?"":L("Arkadaşlarla eşleş bölümünden arkadaşının kodunu, ekran görüntüsünü ya da ders listesini ekle.","Add your friend's code, screenshot or course list under Match with friends.");
+}
+$("sameX").onclick=()=>{$("sameRow").hidden=true};
+$("sameGo").onclick=()=>{
+  const f=allFriends().find(x=>x.id===$("sameSel").value);if(!f)return;
+  allFriends().forEach(x=>x.match=(x===f));
+  let added=0;const before=new Map(picked);let dropped=[];
+  if($("sameAdd").checked)Object.keys(f.picks).forEach(code=>{if(BYCODE[code]&&!picked.has(code)){picked.set(code,null);added++}});
+  let r=generate();
+  if(!r.ok&&added){ // keep only the friend's extra courses that still fit
+    picked=new Map(before);added=0;
+    for(const code of Object.keys(f.picks).filter(c=>BYCODE[c]&&!before.has(c))){picked.set(code,null);if(solve({freeDays:new Set(),minSlot:0,maxEnd:NS}).length)added++;else{picked.delete(code);dropped.push(code)}}
+    flashMsg=null;r=generate();
+  }
+  const shared=Object.keys(f.picks).filter(code=>picked.has(code));
+  const same=shared.filter(code=>{const si=picked.get(code);return si!==null&&C(code).secs[si].n===f.picks[code]});
+  $("sameNote").textContent=r.ok?L(`${f.name} ile ${shared.length} ortak dersin ${same.length} tanesinde aynı şubedesin.${added?` ${added} ders eklendi.`:""}${same.length<shared.length?" Kalanlar çakışma ya da dolu şube yüzünden farklı.":""}${dropped.length?` ${dropped.join(", ")} senin programına sığmadığı için eklenmedi.`:""}`,`You share ${same.length} of ${shared.length} common courses with ${f.name} in the same section.${added?` ${added} courses added.`:""}${same.length<shared.length?" The rest differ because of clashes or full sections.":""}${dropped.length?` ${dropped.join(", ")} didn't fit your timetable, so it wasn't added.`:""}`):L("Çakışmasız program kurulamadı.","No clash-free timetable could be built.");
+};
+$("showFr").onchange=()=>{showFriends=$("showFr").checked;update()};
+$("demoFr").onclick=()=>{const f=exampleFriends()[0];if(!f)return;f.src="code";f.dept=profile.dept;friends.push(f);saveFriends();$("frNote").textContent=L("Örnek arkadaş eklendi.","Example friend added.");update()};
+
+// =================== Google Calendar one-click ===================
+$("gcalBtn").onclick=async()=>{
+  const note=$("gcalNote");const ss=sessions();if(!ss.length)return;
+  if(!mcp){note.textContent=L("Bu görünümde doğrudan eklenemiyor; aşağıdaki bağlantıları ya da .ics dosyasını kullan.","Can't add directly in this view; use the links below or the .ics file.");return}
+  $("gcalBtn").disabled=true;let ok=0,fail=null;
+  for(const {c,s,t} of ss){const fd=firstDate(t[0]);if(!fd)continue;const day=fd.toISOString().slice(0,10);
+    try{await mcp.callTool("Google Calendar","create_event",{summary:`${c.code} ${c.name} (${L("Şube","Section")} ${s.n})`,location:"Yaşar Üniversitesi",
+      startTime:`${day}T${SLOTS[t[1]]}:00`,endTime:`${day}T${endTime(t[1]+t[2])}:00`,timeZone:"Europe/Istanbul",
+      recurrenceData:[`RRULE:FREQ=WEEKLY;UNTIL=${untilStamp()}`]});ok++;note.textContent=L(`${ok}/${ss.length} eklendi…`,`${ok}/${ss.length} added…`)}
+    catch(e){fail=e?.code;break}}
+  $("gcalBtn").disabled=false;
+  note.textContent=!fail?L(`${ok} ders saati Google Takvim'ine haftalık tekrarlı olarak eklendi.`,`${ok} class times added to your Google Calendar as weekly events.`):
+    fail==="server_not_connected"?L("Google Takvim bağlı değil: claude.ai Ayarlar → Bağlayıcılar'dan ekle. Bu arada bağlantıları ya da .ics dosyasını kullanabilirsin.","Google Calendar isn't connected: add it in claude.ai Settings → Connectors. Meanwhile use the links or the .ics file."):
+    fail==="needs_reauth"?L("Google Takvim bağlantısını claude.ai Ayarlar → Bağlayıcılar'dan yenile.","Reconnect Google Calendar in claude.ai Settings → Connectors."):
+    fail==="not_in_manifest"||fail==="approval_required"?L("Google Takvim izni verilmedi.","Google Calendar permission wasn't given."):
+    L(`${ok} ders eklendi, sonra bir hata oldu. Takvimini kontrol et, eksikleri bağlantılarla ekle.`,`${ok} added, then something failed. Check your calendar and add the rest with the links.`);
+};
+
+// =================== Update ===================
+let flashMsg=null;function flash(m){if(flashMsg&&m&&flashMsg[1]!==m[1]){flashQueue.push(flashMsg)}flashMsg=m}
+const flashQueue=[];
+function update(){
+  checkWatches();
+  renderYearFilter();renderCourses();renderGrid();renderPlanB();renderFriends();renderGcal();renderWatches();
+  const cl=conflicts(picked);
+  const ects=[...picked.keys()].reduce((a,code)=>a+ectsOf(C(code)),0),lim=+$("limit").value;
+  $("ectsVal").textContent=`${ects} / ${lim}`;const bar=$("ectsBar");bar.style.width=Math.min(100,ects/lim*100)+"%";bar.classList.toggle("over",ects>lim);
+  const st=stats(picked);$("hoursVal").textContent=L(`${st.hours} saat`,`${st.hours} h`);$("daysVal").textContent=L(`Kampüste ${st.days} gün`,`${st.days} days on campus`);
+  const pill=$("clashPill");
+  if(!picked.size){pill.className="pill idle";pill.textContent=L("Ders seçilmedi","No courses")}
+  else if(cl.length){pill.className="pill bad";pill.textContent=L(`${cl.length} çakışma`,`${cl.length} clash${cl.length>1?"es":""}`)}
+  else{pill.className="pill ok";pill.textContent=L("Çakışma yok","No clashes")}
+  const preBad=[...picked.keys()].filter(code=>preMissing(C(code)).length);
+  const pp=$("prePill");pp.className="pill "+(preBad.length?"bad":picked.size?"ok":"idle");pp.textContent=preBad.length?L(`${preBad.length} ders`,`${preBad.length} course${preBad.length>1?"s":""}`):picked.size?L("Tamam","OK"):"—";
+  $("preTxt").textContent=preBad.length?preBad.join(", "):L(`${passedEcts()} AKTS geçildi`,`${passedEcts()} ECTS passed`);
+  const m=flashQueue.splice(0);if(flashMsg){m.push(flashMsg);flashMsg=null}
+  cl.forEach(([a,b])=>{const where=C(a).secs[picked.get(a)].t.filter(x=>C(b).secs[picked.get(b)].t.some(y=>overlap(x,y))).map(fmtT).join(", ");
+    m.push(["bad",L(`${a} Şube ${C(a).secs[picked.get(a)].n} ile ${b} Şube ${C(b).secs[picked.get(b)].n} çakışıyor (${where}). "Çakışmasız program öner"e bas.`,`${a} Sec. ${C(a).secs[picked.get(a)].n} clashes with ${b} Sec. ${C(b).secs[picked.get(b)].n} (${where}). Press "Suggest a clash-free timetable".`)])});
+  preBad.forEach(code=>m.push(["warn",L(`${code} için ön koşul eksik: ${preMissing(C(code)).join(", ")}. Sistem kayda izin vermeyebilir; danışmanına sor.`,`${code} is missing a prerequisite: ${preMissing(C(code)).join(", ")}. Registration may be blocked; ask your advisor.`)]));
+  if(ects>lim)m.push(["warn",L(`AKTS limiti aşıldı: ${ects}/${lim}.`,`ECTS limit exceeded: ${ects}/${lim}.`)]);
+  [...picked].filter(([,s])=>s===null).forEach(([code])=>m.push(["warn",L(`${code} için açık şube yok.`,`No open section for ${code}.`)]));
+  if(alts.length){const fm=friendMatches(picked);m.push(["ok",L(`${alts.length} çakışmasız program bulundu, en iyisi başta (${altI+1}/${alts.length}).${fm?` Arkadaşlarınla ${fm} ortak şube.`:""}`,`${alts.length} clash-free timetables found, best first (${altI+1}/${alts.length}).${fm?` ${fm} sections shared with friends.`:""}`)])}
+  $("msgs").innerHTML=m.map(([k,t])=>`<div class="msg ${k}">${esc(t).replace(/&quot;/g,'"')}</div>`).join("");
+  $("altnav").hidden=alts.length<2;$("altLbl").textContent=`${altI+1} / ${alts.length}`;$("gen").disabled=!picked.size;
+  $("myCode").textContent=myCode();$("summary").textContent=summaryText();
+}
+
+// =================== Solver ===================
+function solve(cons){
+  const codes=[...picked.keys()],res=[];
+  const allowed=(code,si)=>!isFull(code,si)&&C(code).secs[si].t.every(([d,s,l])=>!cons.freeDays.has(d)&&s>=cons.minSlot&&s+l<=cons.maxEnd);
+  const rec=(i,cur)=>{if(res.length>=3000)return;if(i===codes.length){res.push(new Map(cur));return}
+    const code=codes[i];C(code).secs.forEach((s,si)=>{if(!allowed(code,si))return;if([...cur].some(([o,sj])=>secClash(s,C(o).secs[sj])))return;cur.set(code,si);rec(i+1,cur);cur.delete(code)})};
+  rec(0,new Map());return res;
+}
+function generate(){
+  let res=solve(constraints),relaxed=null;
+  if(!res.length){for(const [lbl,c] of [[L("boş gün isteği","the free-day request"),{...constraints,freeDays:new Set()}],[L("saat aralığı","the time window"),{...constraints,minSlot:0,maxEnd:NS}],[L("tüm tercihler","all preferences"),{freeDays:new Set(),minSlot:0,maxEnd:NS}]]){res=solve(c);if(res.length){relaxed=lbl;break}}}
+  const pref=$("pref").value;
+  const score=m=>{const s=stats(m);const base=pref==="days"?s.days*10+s.gaps:pref==="gaps"?s.gaps*10+s.days:pref==="late"?s.early*10+s.gaps:(s.dayset.has(4)?100:0)+s.days*10+s.gaps;return base-friendMatches(m)*25};
+  res.sort((a,b)=>score(a)-score(b));alts=res;altI=0;
+  if(!res.length){flash(["bad",L("Bu derslerle çakışmasız program kurulamıyor (dolu şubeler hariç). Bir dersi çıkarmayı dene.","No clash-free timetable is possible with these courses (full sections excluded). Try dropping one.")]);update();return {ok:false}}
+  if(relaxed)flash(["warn",L(`Tüm istekleri aynı anda sağlayan program yok; "${relaxed}" esnetildi.`,`No timetable meets every request; relaxed ${relaxed}.`)]);
+  picked=new Map(res[0]);update();return {ok:true,relaxed};
+}
+const showAlt=i=>{altI=(i+alts.length)%alts.length;picked=new Map(alts[altI]);update()};
+
+// =================== Assistant ===================
+let sample=null,downloads=null,ctl=null;
+const slotFrom=h=>{if(!h)return 0;const i=SLOTS.findIndex(s=>s>=h.padStart(5,"0"));return i<0?NS:i};
+const endFrom=h=>{if(!h)return NS;const t=h.padStart(5,"0");let n=0;for(let e=1;e<=NS;e++)if(endTime(e)<=t)n=e;return n};
+function applyIntent(it){
+  const notes=[];
+  (it.remove||[]).forEach(code=>{if(picked.has(code)){picked.delete(code);notes.push(L(`${code} çıkarıldı`,`${code} removed`))}});
+  (it.add||[]).forEach(code=>{if(BYCODE[code]&&!picked.has(code)){picked.set(code,null);notes.push(L(`${code} eklendi`,`${code} added`))}});
+  constraints={freeDays:new Set((it.freeDays||[]).filter(d=>d>=0&&d<=4)),minSlot:slotFrom(it.notBefore),maxEnd:endFrom(it.notAfter)};
+  const names=(it.friends||[]).map(s=>String(s).toLocaleLowerCase("tr"));
+  if(names.length)allFriends().forEach(f=>{const fn=f.name.toLocaleLowerCase("tr");f.match=names.some(n=>fn.includes(n)||n.includes(fn.split(" ")[0]))});
+  if(["days","gaps","late","fri"].includes(it.priority))$("pref").value=it.priority;
+  const r=generate();const parts=[];
+  if(constraints.freeDays.size)parts.push(L(`${[...constraints.freeDays].map(d=>DAYS_LONG.tr[d]).join(", ")} boş`,`${[...constraints.freeDays].map(d=>DAYS_LONG.en[d]).join(", ")} free`));
+  if(constraints.minSlot)parts.push(L(`${SLOTS[constraints.minSlot]} öncesi ders yok`,`nothing before ${SLOTS[constraints.minSlot]}`));
+  if(constraints.maxEnd<NS)parts.push(L(`${endTime(constraints.maxEnd)} sonrası ders yok`,`nothing after ${endTime(constraints.maxEnd)}`));
+  const act=allFriends().filter(f=>f.match).map(f=>f.name);if(act.length)parts.push(L(`${act.join(", ")} ile eşleşme`,`matching ${act.join(", ")}`));
+  return {notes,parts,...r};
+}
+function localParse(text){
+  const t=text.toLocaleLowerCase("tr");const it={freeDays:[],friends:[],add:[],remove:[]};
+  const dr=[/pazartesi|monday/,/salı|sali|tuesday/,/çarşamba|carsamba|wednesday/,/perşembe|persembe|thursday/,/cuma|friday/];
+  if(/boş|olmasın|yok|istemiyorum|free|off|no class|avoid/.test(t))dr.forEach((r,i)=>{if(r.test(t))it.freeDays.push(i)});
+  if(/sabah|08[:.]30|8[:.]30|erken|morning|early/.test(t))it.notBefore="09:30";
+  const m=t.match(/(\d{1,2})[:.](\d{2})\s*'?(?:dan|den|tan|ten)?\s*sonra/)||t.match(/after\s*(\d{1,2})[:.](\d{2})/);if(m)it.notAfter=`${m[1].padStart(2,"0")}:${m[2]}`;
+  if(/az gün|fewest days|fewer days/.test(t))it.priority="days";if(/boşluk|gap/.test(t))it.priority="gaps";
+  allFriends().forEach(f=>{const fn=f.name.split(" ")[0].toLocaleLowerCase("tr");if(t.includes(fn))it.friends.push(fn)});
+  COURSES.forEach(c=>{if(t.includes(c.name.toLocaleLowerCase("tr"))||t.includes(c.code.toLocaleLowerCase("tr"))){if(/çıkar|bırak|sil|remove|drop/.test(t))it.remove.push(c.code);else it.add.push(c.code)}});
+  return it;
+}
+function promptFor(text){
+  const list=COURSES.map(c=>`${c.code} | ${c.name} | ${c.ects??"?"} ECTS | year ${c.year}${c.el?" elective":""} | ${picked.has(c.code)?"SELECTED":"-"}`).join("\n");
+  return `You are a course registration assistant for Yaşar University (${DEPTS[profile.dept].en}, student in year ${profile.year}). Turn the student's request into constraints for a timetable solver.
+Days: 0=Monday … 4=Friday. Classes run 08:30–20:20, 50-minute lessons on the half hour.
+Courses offered this term:
+${list}
+Friends: ${allFriends().map(f=>f.name).join(", ")||"none"}
+
+Student's request: """${text.slice(0,1500)}"""
+
+Reply with ONLY one JSON object:
+{"add":["CODE"],"remove":["CODE"],"freeDays":[4],"notBefore":"09:30"|null,"notAfter":"16:20"|null,"friends":["<friend name>"],"priority":"days"|"gaps"|"late"|"fri"|null,"reply":"1-2 sentences in ${LANG==="en"?"English":"Turkish"} saying what you understood"}
+Only add/remove codes from the list and only when asked. Unspecified fields: empty array or null.`;
+}
+async function runAssistant(){
+  const text=$("aiIn").value.trim();if(!text||!COURSES.length)return;const out=$("aiOut");$("aiGo").disabled=true;let it=null,reply="";
+  if(sample){ctl=new AbortController();$("aiStop").hidden=false;out.textContent=L("Düşünüyor…","Thinking…");
+    try{it=await sample.json(promptFor(text),{modelTier:"quick",signal:ctl.signal});reply=typeof it?.reply==="string"?it.reply:""}
+    catch(e){if(e?.code==="cancelled"){out.textContent=L("Durduruldu.","Stopped.");$("aiGo").disabled=false;$("aiStop").hidden=true;return}
+      if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(e?.code)){sample=null;setAiMode()}
+      reply=L("Yapay zeka yanıt veremedi; isteğini anahtar kelimelerle yorumladım.","The AI couldn't answer, so your request was read by keywords.");it=null}
+    $("aiStop").hidden=true}
+  if(!it){it=localParse(text);if(!reply)reply=L("İsteğini anahtar kelimelerle yorumladım.","Your request was read by keywords.")}
+  const r=applyIntent(it);
+  out.textContent=[reply,r.parts.length?L("Uygulanan: ","Applied: ")+r.parts.join(" · ")+".":"",r.notes.join(". "),
+    r.ok?(r.relaxed?L(`Hepsi birden sağlanamadı; ${r.relaxed} esnetildi.`,`Couldn't meet everything; relaxed ${r.relaxed}.`):L("Program hazır, çakışma yok.","Timetable ready, no clashes.")):L("Bu isteklerle çakışmasız program kurulamadı.","No clash-free timetable fits these requests.")].filter(Boolean).join("\n");
+  $("aiGo").disabled=false;
+}
+function setAiMode(){$("aiMode").textContent=sample?L("Yapay zeka","AI"):L("Anahtar kelime modu","Keyword mode")}
+function renderChips(){
+  const ch=LANG==="en"?["Keep Friday free","No 08:30 classes","Fewest days on campus","No classes after 16:30","Build the same timetable as my friend"]:["Cuma boş olsun","Sabah 08:30 dersi olmasın","En az gün kampüse geleyim","16:30'dan sonra dersim olmasın","Arkadaşımla aynı programı oluştur"];
+  $("aiChips").innerHTML=ch.map(c=>`<button class="chip" type="button">${esc(c)}</button>`).join("");
+  $("aiChips").querySelectorAll(".chip").forEach((b,i,all)=>b.onclick=()=>{if(i===all.length-1){openSame();return}$("aiIn").value=b.textContent;$("aiIn").focus()});
+  $("aiIn").placeholder=L("Örn: Cuma boş olsun, sabah 8:30 dersi istemiyorum.","e.g. Keep Friday free, no 08:30 classes.");
+}
+
+// =================== Import UI ===================
+async function handleFile(file){
+  const note=$("impNote");note.textContent=L("Dosya okunuyor…","Reading file…");
+  try{
+    const X=await loadXLSX();const buf=await file.arrayBuffer();const wb=X.read(buf,{type:"array"});
+    const sheets=wb.SheetNames.map(n=>({name:n,rows:X.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:"",raw:false}),merges:wb.Sheets[n]["!merges"]||[]}));
+    let list=heuristicParse(sheets),how=L("tablo okuyucu","table reader");
+    if(sample&&(list.length<3)){note.textContent=L("Yapay zeka programı okuyor… (30-60 sn sürebilir)","The AI is reading the schedule… (may take 30-60 s)");
+      try{const ai=await aiParse(sheets);if(ai.length>list.length){list=ai;how=L("yapay zeka","AI")}}catch(e){}}
+    if(!list.length){note.textContent=L("Dosyada ders kodu ve gün/saat tablosu bulunamadı. Bölümün haftalık ders programı dosyasını seçtiğinden emin ol.","No course codes with a day/time grid were found. Make sure it's your department's weekly schedule file.");return}
+    const courses=enrich(list,profile.dept);
+    store.set("ydp3_sched_"+profile.dept,JSON.stringify(courses));
+    buildCourses();defaultPassedIfEmpty();autoPick();alts=[];
+    note.textContent=L(`${file.name}: ${courses.length} ders, ${courses.reduce((a,c)=>a+c.secs.length,0)} şube okundu (${how}). Saatleri bir kontrol et.`,`${file.name}: ${courses.length} courses, ${courses.reduce((a,c)=>a+c.secs.length,0)} sections read (${how}). Give the times a quick check.`);
+    friends=friends.filter(f=>f.src==="code");
+    renderAll();
+  }catch(e){note.textContent=L("Dosya açılamadı. .xlsx ya da .csv olduğundan emin ol.","Couldn't open the file. Make sure it's .xlsx or .csv.")}
+}
+function defaultPassedIfEmpty(){if(!passed.size)defaultPassed()}
+$("file").onchange=e=>{const f=e.target.files[0];if(f)handleFile(f);e.target.value=""};
+const drop=$("drop");
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>{const f=e.dataTransfer.files[0];if(f)handleFile(f)});
+$("resetSched").onclick=()=>{store.del("ydp3_sched_"+profile.dept);$("impNote").textContent=L("Yükleme kaldırıldı.","Import removed.");setProfile({})};
+$("shareSched").onclick=async()=>{
+  if(!db)return;const data=store.get("ydp3_sched_"+profile.dept);if(!data)return;
+  try{await db.doc("schedules/"+profile.dept).set({courses:JSON.parse(data),updatedAt:new Date().toISOString(),by:myId||""});$("impNote").textContent=L("Program bölümünle paylaşıldı. Bu bölümü seçen herkes artık gerçek saatleri görür.","Shared with your department. Everyone who picks this department now sees the real times.")}
+  catch(e){$("impNote").textContent=L("Paylaşılamadı: bu sayfada yazma iznin yok.","Couldn't share: you don't have write access on this page.")}
+};
+
+// =================== Profile changes ===================
+function savePassed(){store.set("ydp3_passed_"+profile.dept+"_"+profile.year,JSON.stringify([...passed]))}
+function loadPassed(){const s=store.get("ydp3_passed_"+profile.dept+"_"+profile.year);if(s){try{passed=new Set(JSON.parse(s));return true}catch{}}defaultPassed();return false}
+function setProfile(p,{keepDemo=false}={}){
+  if(p.fac&&p.fac!==profile.fac&&!p.dept)p.dept=FACULTIES.find(f=>f.id===p.fac).depts[0].id;
+  if(p.dept&&!p.fac)p.fac=DEPTS[p.dept].fac;
+  profile={...profile,...p};store.set("ydp3_profile",JSON.stringify(profile));
+  $("limit").value=profile.year===1?"30":"40";
+  simFull.clear();simOpen.clear();alts=[];constraints={freeDays:new Set(),minSlot:0,maxEnd:NS};yearFilter="mine";query="";$("q").value="";
+  buildCourses();loadWatches();
+  if(!keepDemo)loadPassed();
+  autoPick();
+  friends=friends.filter(f=>f.src==="code"&&f.dept===profile.dept);
+  renderAll();
+}
+function renderAll(){
+  renderProfile();renderPassed();update();
+  const imp=!!store.get("ydp3_sched_"+profile.dept);$("resetSched").hidden=!imp;$("shareSched").hidden=!(imp&&db);
+}
+$("fac").onchange=()=>setProfile({fac:$("fac").value});
+$("dept").onchange=()=>setProfile({dept:$("dept").value});
+$("q").oninput=()=>{query=$("q").value;renderCourses()};
+$("gen").onclick=()=>generate();$("pref").onchange=()=>{if(alts.length)generate()};
+$("prev").onclick=()=>showAlt(altI-1);$("next").onclick=()=>showAlt(altI+1);
+$("clear").onclick=()=>{picked=new Map();alts=[];constraints={freeDays:new Set(),minSlot:0,maxEnd:NS};update()};
+$("limit").onchange=update;$("aiGo").onclick=runAssistant;$("aiStop").onclick=()=>ctl?.abort();
+$("semStart").onchange=$("semEnd").onchange=renderGcal;
+$("hideWelcome").onclick=()=>{$("welcome").hidden=true;store.set("ydp3_welcome","1")};
+$("lgTr").onclick=()=>{LANG="tr";store.set("ydp3_lang","tr");applyLang();renderChips();setAiMode();friends.forEach(f=>{if(f.src==="example")f.name=f.name.replace("(example)","(örnek)")});renderAll()};
+$("lgEn").onclick=()=>{LANG="en";store.set("ydp3_lang","en");applyLang();renderChips();setAiMode();friends.forEach(f=>{if(f.src==="example")f.name=f.name.replace("(örnek)","(example)")});renderAll()};
+function copyText(text,noteEl,ok){
+  const fallback=()=>{noteEl.textContent=L("Kopyalanamadı; metni seçip kopyala.","Couldn't copy; select the text and copy it.")};
+  try{navigator.clipboard.writeText(text).then(()=>{noteEl.textContent=ok},fallback)}catch{fallback()}
+}
+$("copySum").onclick=()=>copyText(summaryText(),$("sumNote"),L("Kopyalandı.","Copied."));
+$("copyCode").onclick=()=>copyText(myCode(),$("frNote"),L("Kod kopyalandı. Arkadaşına gönder.","Code copied. Send it to your friend."));
+$("myName").oninput=()=>{store.set("ydp3_name",$("myName").value);$("myCode").textContent=myCode();$("summary").textContent=summaryText()};
+$("addFriend").onclick=()=>{
+  const raw=$("friendCode").value.trim();
+  try{if(!raw.startsWith("YDP3."))throw 0;const o=JSON.parse(decodeURIComponent(escape(atob(raw.slice(5)))));
+    if(!o||typeof o.n!=="string"||typeof o.p!=="object")throw 0;
+    const picks={};for(const [k,v] of Object.entries(o.p))if(typeof k==="string"&&Number.isInteger(v))picks[k]=v;
+    friends.push({id:"k"+Date.now(),name:o.n.slice(0,40),dept:o.d||profile.dept,picks,src:"code",match:false});saveFriends();
+    $("friendCode").value="";$("frNote").textContent=L(`${o.n.slice(0,40)} eklendi.`,`${o.n.slice(0,40)} added.`);update()}
+  catch{$("frNote").textContent=L("Kod okunamadı. Kodun tamamını yapıştır.","That code couldn't be read. Paste the whole code.")}
+};
+$("icsBtn").onclick=async()=>{const n=$("icsNote");n.dataset.locked="1";
+  if(!downloads){n.textContent=L("Bu görünümde dosya indirilemiyor; aşağıdaki bağlantıları kullan.","Files can't be downloaded here; use the links below.");return}
+  try{await downloads.save({filename:"yasar-ders-programi.ics",data:buildICS()});n.textContent=L("Kaydedildi. Takvim uygulamanda içe aktar.","Saved. Import it into your calendar app.")}
+  catch(e){if(e?.code==="rejected_extension"||e?.code==="extension_not_enabled"){try{await downloads.save({filename:"yasar-ders-programi.txt",data:buildICS()});n.textContent=L(".txt olarak kaydedildi; uzantıyı .ics yap.","Saved as .txt; rename it to .ics.")}catch{n.textContent=L("İndirme yapılmadı.","Nothing was downloaded.")}}
+    else n.textContent=e?.code==="declined"?L("İndirme iptal edildi.","Download cancelled."):L("İndirme çalışmadı; bağlantıları kullan.","Download didn't work; use the links.")}};
+
+// =================== Shared data (db) ===================
+let db=null,user=null,myId=null;
+async function initShared(){
+  [db,user]=await Promise.all([claude.use("db"),claude.use("user")]);
+  myId=user?await user.id():null;
+  if(!db){$("grpState").textContent=L("Paylaşım koduyla","Via share code");return}
+  db.collection("schedules").onSnapshot(snap=>{
+    const next={};snap.docs.forEach(d=>{if(d.exists){const v=d.data();if(Array.isArray(v?.courses))next[d.id]={courses:v.courses.filter(c=>c&&typeof c.code==="string"&&Array.isArray(c.secs))}}});
+    const changed=JSON.stringify(Object.keys(next))!==JSON.stringify(Object.keys(sharedScheds));sharedScheds=next;
+    if(changed&&!store.get("ydp3_sched_"+profile.dept)&&next[profile.dept]&&source!=="shared")setProfile({});else renderProfile();
+  },()=>{});
+  if(!myId){$("grpState").textContent=L("Paylaşım koduyla","Via share code");return}
+  $("saveGroup").hidden=false;$("grpState").textContent=L("Grup bağlantısı açık","Group connected");renderAll();
+  db.collection("plans").onSnapshot(async snap=>{
+    const docs=snap.docs.filter(d=>d.exists&&d.id!==myId);const ps=docs.length?await user.profiles(docs.map(d=>d.id)):{};
+    const prev=new Map(groupFriends.map(f=>[f.id,f.match]));
+    groupFriends=docs.map(d=>{const v=d.data()||{};const picks={};for(const [k,n] of Object.entries(v.picks||{}))if(Number.isInteger(n))picks[k]=n;
+      return {id:d.id,name:ps[d.id]?.name||L("Grup arkadaşı","Group member"),dept:v.dept,picks,src:"grup",match:prev.get(d.id)??false}});
+    update();
+  },()=>{});
+}
+$("saveGroup").onclick=async()=>{if(!db||!myId)return;
+  try{await db.doc("plans/"+myId).set({dept:profile.dept,year:profile.year,picks:myPicks(),updatedAt:new Date().toISOString()});$("frNote").textContent=L("Programın gruba kaydedildi.","Saved to the group.")}
+  catch{$("frNote").textContent=L("Kaydedilemedi: yazma iznin yok. Paylaşım kodunu kullan.","Couldn't save: no write access. Use the share code.");$("saveGroup").hidden=true}};
+
+// =================== Boot ===================
+(function boot(){
+  LANG=store.get("ydp3_lang")||"tr";
+  try{const p=JSON.parse(store.get("ydp3_profile")||"null");if(p&&DEPTS[p.dept]&&[1,2,3,4].includes(p.year))profile={fac:DEPTS[p.dept].fac,dept:p.dept,year:p.year}}catch{}
+  if(store.get("ydp3_welcome"))$("welcome").hidden=true;
+  const n=store.get("ydp3_name");if(n)$("myName").value=n;
+  const we=store.get("ydp3_wemail");if(we)$("wEmail").value=we;
+  $("wEmail").oninput=()=>store.set("ydp3_wemail",$("wEmail").value.trim());
+  try{const s=JSON.parse(store.get("ydp3_friends")||"[]");if(Array.isArray(s))friends=s.filter(f=>f&&typeof f.name==="string"&&f.picks).map(f=>({...f,src:"code"}))}catch{}
+  applyLang();renderChips();
+  const firstVisit=!store.get("ydp3_profile");
+  // Example state for a first look: ESE year 3 who hasn't passed MATH 2263 yet (a repeat that's also a prerequisite)
+  if(firstVisit&&profile.dept==="ese"&&profile.year===3){
+    buildCourses();defaultPassed();passed.delete("MATH 2263");
+    $("aiIn").value=L("Cuma boş olsun.","Keep Friday free.");
+    setProfile({},{keepDemo:true});
+    flash(["info",L("Örnek: ESE 3. sınıf, MATH 2263'ü geçememiş bir öğrenci. Ders alttan eklendi; EEE 3718'in ön koşulu olduğu için uyarı var. Kendi bilgilerini yukarıdan seç.","Example: an ESE year-3 student who hasn't passed MATH 2263. It's been added as a repeat, and EEE 3718 warns because it's a prerequisite. Pick your own details above.")]);
+    update();
+  } else setProfile({});
+  setAiMode();
+  if(!window.claude?.use){renderGcal();return}
+  (async()=>{const [s,d,m]=await Promise.all([claude.use("sample"),claude.use("downloads"),claude.use("mcp")]);sample=s;downloads=d;mcp=m;setAiMode();renderGcal();initShared()})();
+})();
+</script>
+
+</body>
+</html>
